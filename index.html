@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dashboard IMC – Ferretería El Cedro</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 1rem 2rem;
+      background: #0b1120;
+      color: #e5e7eb;
+    }
+
+    h1 {
+      margin-bottom: 0.5rem;
+    }
+
+    #filtros {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin: 1rem 0;
+      padding: 1rem;
+      background: #020617;
+      border-radius: 0.75rem;
+      border: 1px solid #1f2937;
+    }
+
+    #filtros select,
+    #filtros input[type="checkbox"] {
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.5rem;
+      border: 1px solid #4b5563;
+      background: #111827;
+      color: #e5e7eb;
+    }
+
+    #kpi-global {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .card {
+      background: #020617;
+      border-radius: 0.75rem;
+      padding: 0.75rem 1rem;
+      border: 1px solid #1f2937;
+    }
+
+    .card h3 {
+      margin: 0;
+      font-size: 0.9rem;
+      color: #9ca3af;
+    }
+
+    .card p {
+      margin: 0.35rem 0 0;
+      font-size: 1.1rem;
+      font-weight: 600;
+    }
+
+    #tablaSucursales {
+      margin-bottom: 2rem;
+    }
+
+    .tabla-sucursales {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+
+    .tabla-sucursales thead {
+      background: #020617;
+    }
+
+    .tabla-sucursales th,
+    .tabla-sucursales td {
+      border: 1px solid #1f2937;
+      padding: 0.4rem 0.6rem;
+      text-align: right;
+    }
+
+    .tabla-sucursales th:first-child,
+    .tabla-sucursales td:first-child {
+      text-align: left;
+    }
+
+    canvas {
+      background: #020617;
+      border-radius: 0.75rem;
+      padding: 0.75rem;
+      border: 1px solid #1f2937;
+      margin-bottom: 1.5rem;
+    }
+
+    #fileInput {
+      margin-top: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Dashboard IMC – Rentabilidad y Calidad de Datos</h1>
+  <p>Sube el archivo <strong>BASE DIRECCION IMC.csv</strong> y usa los filtros para analizar.</p>
+
+  <!-- Cargar archivo -->
+  <div>
+    <label for="fileInput">Seleccionar archivo CSV:</label>
+    <input type="file" id="fileInput" accept=".csv" />
+  </div>
+
+  <!-- Filtros -->
+  <section id="filtros">
+    <div>
+      <label for="filtroAnio">Año:</label><br />
+      <select id="filtroAnio"></select>
+    </div>
+
+    <div>
+      <label for="filtroAlmacen">Almacén:</label><br />
+      <select id="filtroAlmacen" multiple size="4"></select>
+    </div>
+
+    <div>
+      <label for="filtroTipoFactura">Tipo de factura:</label><br />
+      <select id="filtroTipoFactura"></select>
+    </div>
+
+    <div>
+      <label for="filtroCategoria">Categoría:</label><br />
+      <select id="filtroCategoria" multiple size="4"></select>
+    </div>
+
+    <div style="align-self:flex-end;">
+      <label>
+        <input type="checkbox" id="chkExcluirAD" checked />
+        Excluir BASE / LIQUIDACION / PROMOCIÓN / RANGO / UNIDAD CONVERSIÓN
+      </label>
+    </div>
+  </section>
+
+  <!-- KPIs -->
+  <section id="kpi-global">
+    <div class="card" id="kpiVentas"></div>
+    <div class="card" id="kpiUtilidad"></div>
+    <div class="card" id="kpiMargen"></div>
+    <div class="card" id="kpiCredito"></div>
+    <div class="card" id="kpiNegativas"></div>
+  </section>
+
+  <!-- Tabla sucursales -->
+  <div id="tablaSucursales"></div>
+
+  <!-- Gráficos -->
+  <canvas id="graficoCategorias"></canvas>
+  <canvas id="graficoSucursales"></canvas>
+  <canvas id="graficoDiaSemana"></canvas>
+
+  <!-- Librerías y JS -->
+  <!-- PapaParse desde CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <!-- Chart.js desde CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Tu lógica de dashboard -->
+  <script src="dashboard_imc.js"></script>
+</body>
+</html>
