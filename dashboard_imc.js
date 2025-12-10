@@ -130,6 +130,7 @@ const ALL_DETALLE_COLS = [
   {
     key: "margen",
     label: "Margen %",
+
     type: "number",
     value: (r) => r.margen_calc || 0,
     display: (r) => formatPorcentaje(r.margen_calc || 0),
@@ -157,16 +158,16 @@ const ALL_DETALLE_COLS = [
   },
 ];
 
-// 7 columnas visibles (slots) iniciales
+// 7 columnas visibles (slots) iniciales – en el orden que pediste
 const MAX_DETALLE_COLS = 7;
 let detalleSlotKeys = [
-  "fecha",
+  "year",
   "almacen",
-  "factura",
-  "cliente",
   "categoria",
-  "producto",
-  "tipoFactura",
+  "costo",
+  "subt_fac",
+  "margen",
+  "utilidad",
 ];
 
 let dragFieldKey = null;
@@ -226,15 +227,6 @@ function parseFechaCedro(fechaStr) {
   return new Date(year, month - 1, day);
 }
 
-function parseNumero(valor) {
-  if (valor === null || valor === undefined) return 0;
-  const limpio = String(valor).replace(/\$/g, "").replace(/,/g, "").trim();
-  if (limpio === "") return 0;
-  const num = parseFloat(num = limpio);
-  return isNaN(num) ? 0 : num;
-}
-
-// Fix: correct parseNumero implementation (typo above)
 function parseNumero(valor) {
   if (valor === null || valor === undefined) return 0;
   const limpio = String(valor).replace(/\$/g, "").replace(/,/g, "").trim();
@@ -800,12 +792,19 @@ function buildDeltaHtml(prev, act) {
   )}%</span>`;
 }
 
+/**
+ * COMPARATIVO:
+ * - Tabla global 2024 vs 2025 (doble clic en métricas)
+ * - Gráfico sucursales
+ * - Gráfico categorías: top crecimiento y top caída, con delta margen
+ */
 function renderComparativo() {
   const cont = document.getElementById("tablaComparativoGlobal");
   const ctxSuc = document.getElementById("graficoComparativoSucursales");
   const ctxCat = document.getElementById("graficoComparativoCategorias");
   if (!cont || !ctxSuc || !ctxCat) return;
 
+  // Usamos los filtros de arriba, pero SIN filtro de año
   const base = getDatosFiltradosSinAnio();
   if (!base.length) {
     cont.innerHTML = "<p>Sin datos para comparar 2024 vs 2025.</p>";
@@ -820,7 +819,7 @@ function renderComparativo() {
   const k24 = calcularKpis(r24);
   const k25 = calcularKpis(r25);
 
-  // ====== TABLA COMPARATIVA GLOBAL ======
+  // ====== TABLA COMPARATIVA GLOBAL (doble clic en métricas) ======
   cont.innerHTML = `
     <table class="tabla-comparativo">
       <thead>
@@ -866,7 +865,7 @@ function renderComparativo() {
     </table>
   `;
 
-  // ====== GRÁFICO SUCURSALES (igual que antes) ======
+  // ====== GRÁFICO SUCURSALES ======
   const mapaSuc = {};
   base.forEach((r) => {
     const a = r.almacen || "SIN_ALMACEN";
@@ -940,9 +939,9 @@ function renderComparativo() {
     const margen25 = g.subt25 > 0 ? g.util25 / g.subt25 : 0;
     let deltaVentas = null;
     if (g.v24 > 0) {
-      deltaVentas = (g.v25 - g.v24) / g.v24; // crecimiento %
+      deltaVentas = (g.v25 - g.v24) / g.v24;
     }
-    const deltaMargen = margen25 - margen24; // diferencia de margen (2025 - 2024)
+    const deltaMargen = margen25 - margen24;
     return {
       ...g,
       margen24,
@@ -961,7 +960,7 @@ function renderComparativo() {
     return;
   }
 
-  const N = 5;
+  const N = 5; // top 5 ↑ y top 5 ↓
 
   const topUp = [...valid]
     .sort((a, b) => b.deltaVentas - a.deltaVentas)
@@ -1044,12 +1043,16 @@ function renderComparativo() {
   });
 }
 
-/* ====== Ventana emergente al doble clic – Vista por categoría + drill a artículos ====== */
+/* ====== Ventanas emergentes comparativo ====== */
 
+/**
+ * 1er nivel: doble clic en fila de tabla comparativo
+ * Abre ventana con comparativa Año / Almacén / Categoría
+ */
 function handleComparativoDblClick(metricKey) {
   if (!metricKey) return;
 
-  const base = getDatosFiltradosSinAnio();
+  const base = getDatosFiltradosSinAnio(); // respeta filtros de arriba, menos año
   if (!base.length) {
     alert("Sin datos para mostrar detalle con los filtros actuales.");
     return;
@@ -1085,14 +1088,14 @@ function handleComparativoDblClick(metricKey) {
     return;
   }
 
-  // comparativa 2024 vs 2025
+  // Solo 2024 y 2025
   rows = rows.filter((r) => r.year === 2024 || r.year === 2025);
   if (!rows.length) {
     alert("No hay datos de 2024 ni 2025 para la métrica y filtros seleccionados.");
     return;
   }
 
-  // Agrupar por (year, almacen, categoria)
+  // Agrupar por (Año, Almacén, Categoría)
   const mapa = {};
   rows.forEach((r) => {
     const year = r.year || "";
@@ -1152,7 +1155,7 @@ function handleComparativoDblClick(metricKey) {
 
   const nota =
     grupos.length > maxRows
-      ? `<p style="font-size:11px;color:#9ca3af;">Mostrando ${maxRows} de ${grupos.length} categorías.</p>`
+      ? `<p style="font-size:11px;color:#9ca3af;">Mostrando ${maxRows} de ${grupos.length} combinaciones Año/Almacén/Categoría.</p>`
       : "";
 
   const win = window.open("", "_blank");
@@ -1207,9 +1210,9 @@ function handleComparativoDblClick(metricKey) {
     <body>
       <h1>${escapeHtml(titulo)}</h1>
       <p>
-        Comparativa año contra año (2024 vs 2025) por categoría y almacén,
-        respetando los filtros superiores (almacén, tipo de factura, categoría y AD).
-        Doble clic en una categoría para ver el desglose por artículos.
+        Comparativa año contra año (2024 vs 2025) por Categoría y Almacén,
+        respetando filtros superiores (almacén, tipo de factura, categoría y AD).
+        Doble clic en una fila para ver el desglose por artículos de esa Categoría.
       </p>
       <table id="catTable">
         <thead>
@@ -1315,6 +1318,7 @@ function handleComparativoDblClick(metricKey) {
               });
             });
 
+          // Doble clic en una fila → llamar a la función del padre para desglose por artículos
           tbody.addEventListener("dblclick", function(e){
             var tr = e.target.closest("tr");
             if (!tr) return;
@@ -1336,8 +1340,9 @@ function handleComparativoDblClick(metricKey) {
   win.document.close();
 }
 
-/* ====== Drill-down a detalle por artículos ====== */
-
+/**
+ * 2do nivel: llamado desde la ventana de categorías (desglose por artículos)
+ */
 window.handleCategoriaDrill = function (year, almacen, categoria, metricKey) {
   const base = getDatosFiltradosSinAnio();
   if (!base.length) {
