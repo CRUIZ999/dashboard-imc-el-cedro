@@ -1,302 +1,50 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8" />
-  <title>Dashboard IMC – Ferretería El Cedro</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+/* ----------------------------------------------------
+ * 11. Inicialización segura de pestañas
+ * -------------------------------------------------- */
 
-  <style>
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      margin: 0;
-      padding: 1rem 2rem;
-      background: #0b1120;
-      color: #e5e7eb;
+// Este bloque se ejecuta una vez y conecta los botones de pestaña
+(function initTabsSafe() {
+  // Esperamos a que el DOM esté listo por si el script se carga muy rápido
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", attachTabs);
+  } else {
+    attachTabs();
+  }
+
+  function attachTabs() {
+    const tabButtons = document.querySelectorAll(".tab-btn");
+    const views = document.querySelectorAll(".view");
+    if (!tabButtons.length || !views.length) {
+      // Si no encuentra pestañas, no hacemos nada
+      return;
     }
 
-    h1 {
-      margin-bottom: 0.25rem;
-    }
+    tabButtons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const view = btn.getAttribute("data-view");
 
-    p {
-      margin-top: 0;
-      color: #9ca3af;
-      font-size: 0.9rem;
-    }
+        // Quitar estado activo
+        tabButtons.forEach((b) => b.classList.remove("active"));
+        views.forEach((v) => v.classList.remove("active"));
 
-    #top-bar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 1rem;
-      flex-wrap: wrap;
-      margin-bottom: 0.75rem;
-    }
+        // Activar pestaña seleccionada
+        btn.classList.add("active");
+        const viewEl = document.getElementById(`view-${view}`);
+        if (viewEl) {
+          viewEl.classList.add("active");
+        }
 
-    #top-bar input[type="file"] {
-      font-size: 0.85rem;
-    }
-
-    #filtros {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 1rem;
-      margin: 0.5rem 0 0.75rem;
-      padding: 0.75rem 1rem;
-      background: #020617;
-      border-radius: 0.75rem;
-      border: 1px solid #1f2937;
-    }
-
-    #filtros select,
-    #filtros input[type="checkbox"] {
-      padding: 0.15rem 0.4rem;
-      border-radius: 0.5rem;
-      border: 1px solid #4b5563;
-      background: #111827;
-      color: #e5e7eb;
-      font-size: 0.85rem;
-    }
-
-    #tabs {
-      display: flex;
-      gap: 0.5rem;
-      margin: 0.5rem 0 1rem;
-      border-bottom: 1px solid #1f2937;
-    }
-
-    .tab-btn {
-      padding: 0.4rem 0.9rem;
-      border: none;
-      background: transparent;
-      color: #9ca3af;
-      font-size: 0.85rem;
-      cursor: pointer;
-      border-radius: 0.5rem 0.5rem 0 0;
-    }
-
-    .tab-btn.active {
-      background: #020617;
-      color: #e5e7eb;
-      border: 1px solid #1f2937;
-      border-bottom: 1px solid #020617;
-    }
-
-    .view {
-      display: none;
-    }
-
-    .view.active {
-      display: block;
-    }
-
-    #kpi-global {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-      gap: 0.75rem;
-      margin-bottom: 1.25rem;
-    }
-
-    .card {
-      background: #020617;
-      border-radius: 0.75rem;
-      padding: 0.6rem 0.8rem;
-      border: 1px solid #1f2937;
-    }
-
-    .card h3 {
-      margin: 0;
-      font-size: 0.85rem;
-      color: #9ca3af;
-    }
-
-    .card p {
-      margin: 0.25rem 0 0;
-      font-size: 1rem;
-      font-weight: 600;
-      color: #e5e7eb;
-    }
-
-    #tablaSucursales {
-      margin-bottom: 1.5rem;
-    }
-
-    .tabla-sucursales,
-    .tabla-detalle,
-    .tabla-comparativo {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.85rem;
-    }
-
-    .tabla-sucursales thead,
-    .tabla-detalle thead,
-    .tabla-comparativo thead {
-      background: #020617;
-    }
-
-    .tabla-sucursales th,
-    .tabla-sucursales td,
-    .tabla-detalle th,
-    .tabla-detalle td,
-    .tabla-comparativo th,
-    .tabla-comparativo td {
-      border: 1px solid #1f2937;
-      padding: 0.3rem 0.4rem;
-      text-align: right;
-    }
-
-    .tabla-sucursales th:first-child,
-    .tabla-sucursales td:first-child,
-    .tabla-detalle th:first-child,
-    .tabla-detalle td:first-child,
-    .tabla-comparativo th:first-child,
-    .tabla-comparativo td:first-child {
-      text-align: left;
-    }
-
-    canvas {
-      background: #020617;
-      border-radius: 0.75rem;
-      padding: 0.6rem;
-      border: 1px solid #1f2937;
-      margin-bottom: 1.2rem;
-    }
-
-    #view-detalle-controls {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 0.5rem;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-    }
-
-    #searchDetalle {
-      padding: 0.25rem 0.5rem;
-      border-radius: 0.5rem;
-      border: 1px solid #4b5563;
-      background: #111827;
-      color: #e5e7eb;
-      font-size: 0.85rem;
-      min-width: 220px;
-    }
-
-    .help-text {
-      font-size: 0.75rem;
-      color: #9ca3af;
-    }
-
-    .delta {
-      font-size: 0.8rem;
-      font-weight: 600;
-      margin-left: 0.25rem;
-    }
-    .delta-up {
-      color: #22c55e;
-    }
-    .delta-down {
-      color: #ef4444;
-    }
-    .delta-flat {
-      color: #9ca3af;
-    }
-  </style>
-</head>
-<body>
-  <div id="top-bar">
-    <div>
-      <h1>Dashboard IMC – Rentabilidad y Calidad de Datos</h1>
-      <p>Sube el archivo <strong>BASE DIRECCION IMC.csv</strong>, aplica filtros y navega entre vistas.</p>
-    </div>
-    <div>
-      <label for="fileInput" style="font-size:0.85rem;">Seleccionar archivo CSV:</label><br />
-      <input type="file" id="fileInput" accept=".csv" />
-    </div>
-  </div>
-
-  <!-- Filtros -->
-  <section id="filtros">
-    <div>
-      <label for="filtroAnio">Año:</label><br />
-      <select id="filtroAnio"></select>
-    </div>
-
-    <div>
-      <label for="filtroAlmacen">Almacén:</label><br />
-      <select id="filtroAlmacen" multiple size="4"></select>
-    </div>
-
-    <div>
-      <label for="filtroTipoFactura">Tipo de factura:</label><br />
-      <select id="filtroTipoFactura"></select>
-    </div>
-
-    <div>
-      <label for="filtroCategoria">Categoría:</label><br />
-      <select id="filtroCategoria" multiple size="4"></select>
-    </div>
-
-    <div style="align-self:flex-end;">
-      <label>
-        <input type="checkbox" id="chkExcluirAD" checked />
-        Excluir BASE / LIQUIDACION / PROMOCIÓN / RANGO / UNIDAD CONVERSIÓN
-      </label>
-    </div>
-  </section>
-
-  <!-- Tabs -->
-  <div id="tabs">
-    <button class="tab-btn active" data-view="resumen">Resumen</button>
-    <button class="tab-btn" data-view="comparativo">Comparativo YoY</button>
-    <button class="tab-btn" data-view="detalle">Detalle de datos</button>
-  </div>
-
-  <!-- Vista Resumen -->
-  <div id="view-resumen" class="view active">
-    <section id="kpi-global">
-      <div class="card" id="kpiVentas"></div>
-      <div class="card" id="kpiUtilidad"></div>
-      <div class="card" id="kpiMargen"></div>
-      <div class="card" id="kpiCredito"></div>
-      <div class="card" id="kpiNegativas"></div>
-    </section>
-
-    <div id="tablaSucursales"></div>
-
-    <canvas id="graficoCategorias"></canvas>
-    <canvas id="graficoSucursales"></canvas>
-    <canvas id="graficoDiaSemana"></canvas>
-  </div>
-
-  <!-- Vista Comparativo YoY -->
-  <div id="view-comparativo" class="view">
-    <p class="help-text">
-      Comparación 2024 vs 2025 aplicando los filtros de almacén, tipo de factura, categoría y el switch de AD. 
-      El filtro de año se ignora en esta vista.
-    </p>
-    <div id="tablaComparativoGlobal"></div>
-    <canvas id="graficoComparativoSucursales"></canvas>
-    <canvas id="graficoComparativoCategorias"></canvas>
-  </div>
-
-  <!-- Vista Detalle -->
-  <div id="view-detalle" class="view">
-    <div id="view-detalle-controls">
-      <div>
-        <label for="searchDetalle">Buscar (cliente / producto / factura):</label><br />
-        <input type="text" id="searchDetalle" placeholder="Escribe texto para filtrar..." />
-      </div>
-      <div class="help-text">
-        Se muestran hasta 500 filas según filtros y búsqueda.
-      </div>
-    </div>
-    <div id="tablaDetalle"></div>
-  </div>
-
-  <!-- Librerías y JS -->
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="dashboard_imc.js"></script>
-</body>
-</html>
+        // Redibujar contenido según vista
+        if (typeof renderizarDashboard === "function" && view === "resumen") {
+          renderizarDashboard();
+        }
+        if (typeof renderComparativo === "function" && view === "comparativo") {
+          renderComparativo();
+        }
+        if (typeof renderDetalle === "function" && view === "detalle") {
+          renderDetalle();
+        }
+      });
+    });
+  }
+})();
