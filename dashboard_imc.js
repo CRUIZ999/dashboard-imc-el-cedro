@@ -11,6 +11,7 @@ let charts = {
   compSucursales: null,
   compCategorias: null,
 };
+let drillMetric = null; // métrica seleccionada desde comparativo YoY para drill-down
 
 document.addEventListener("DOMContentLoaded", () => {
   const fileInput = document.getElementById("fileInput");
@@ -76,6 +77,11 @@ document.addEventListener("DOMContentLoaded", () => {
   tabButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
       const view = btn.getAttribute("data-view");
+
+      // si salgo de detalle, limpio drill-down
+      if (view !== "detalle") {
+        drillMetric = null;
+      }
 
       tabButtons.forEach((b) => b.classList.remove("active"));
       views.forEach((v) => v.classList.remove("active"));
@@ -253,6 +259,12 @@ function poblarFiltroMultiples(data, campo, idSelect) {
   if (!sel) return;
   sel.innerHTML = "";
 
+  // opción visual "Todos"
+  const optTodos = document.createElement("option");
+  optTodos.value = "__todos__";
+  optTodos.textContent = "Todos";
+  sel.appendChild(optTodos);
+
   const valores = Array.from(
     new Set(
       data
@@ -276,7 +288,14 @@ function poblarFiltroMultiples(data, campo, idSelect) {
 function getValoresMultiples(idSelect) {
   const el = document.getElementById(idSelect);
   if (!el) return [];
-  return Array.from(el.selectedOptions || []).map((o) => o.value);
+  const vals = Array.from(el.selectedOptions || []).map((o) => o.value);
+
+  // Si está seleccionado "Todos" ⇒ no filtrar
+  if (vals.includes("__todos__")) {
+    return [];
+  }
+
+  return vals.filter((v) => v !== "__todos__");
 }
 
 function getDatosFiltrados() {
@@ -680,7 +699,7 @@ function renderComparativo() {
   const k24 = calcularKpis(rows2024);
   const k25 = calcularKpis(rows2025);
 
-  // Tabla global
+  // Tabla global con data-metric para drill-down
   let html = `
     <table class="tabla-comparativo">
       <thead>
@@ -692,31 +711,31 @@ function renderComparativo() {
         </tr>
       </thead>
       <tbody>
-        <tr>
+        <tr data-metric="ventas">
           <td>Ventas (Subtotal)</td>
           <td>${formatMoneda(k24.ventas)}</td>
           <td>${formatMoneda(k25.ventas)}</td>
           <td>${buildDeltaHtml(k24.ventas, k25.ventas)}</td>
         </tr>
-        <tr>
+        <tr data-metric="utilidad">
           <td>Utilidad Bruta</td>
           <td>${formatMoneda(k24.utilidad)}</td>
           <td>${formatMoneda(k25.utilidad)}</td>
           <td>${buildDeltaHtml(k24.utilidad, k25.utilidad)}</td>
         </tr>
-        <tr>
+        <tr data-metric="margen">
           <td>Margen Bruto %</td>
           <td>${formatPorcentaje(k24.margen)}</td>
           <td>${formatPorcentaje(k25.margen)}</td>
           <td>${buildDeltaHtml(k24.margen, k25.margen)}</td>
         </tr>
-        <tr>
+        <tr data-metric="credito">
           <td>% Ventas a Crédito</td>
           <td>${formatPorcentaje(k24.pctCredito)}</td>
           <td>${formatPorcentaje(k25.pctCredito)}</td>
           <td>${buildDeltaHtml(k24.pctCredito, k25.pctCredito)}</td>
         </tr>
-        <tr>
+        <tr data-metric="negativas">
           <td>% Ventas con Utilidad Negativa</td>
           <td>${formatPorcentaje(k24.pctNegativas)}</td>
           <td>${formatPorcentaje(k25.pctNegativas)}</td>
@@ -726,6 +745,17 @@ function renderComparativo() {
     </table>
   `;
   contTabla.innerHTML = html;
+
+  // activar drill-down por doble clic
+  const filas = contTabla.querySelectorAll("tbody tr");
+  filas.forEach((tr) => {
+    const metricKey = tr.getAttribute("data-metric");
+    tr.style.cursor = "pointer";
+    tr.title = "Doble clic para ver detalle de esta métrica";
+    tr.addEventListener("dblclick", () => {
+      handleComparativoDblClick(metricKey);
+    });
+  });
 
   // Gráfico comparativo por sucursal
   const mapaSuc = {};
@@ -820,6 +850,24 @@ function renderComparativo() {
   });
 }
 
+function handleComparativoDblClick(metricKey) {
+  drillMetric = metricKey; // guardar qué métrica eligió el usuario
+
+  // Activar pestaña "Detalle de datos"
+  const tabButtons = document.querySelectorAll(".tab-btn");
+  const views = document.querySelectorAll(".view");
+  tabButtons.forEach((b) => b.classList.remove("active"));
+  views.forEach((v) => v.classList.remove("active"));
+
+  const btnDetalle = document.querySelector('.tab-btn[data-view="detalle"]');
+  const viewDetalle = document.getElementById("view-detalle");
+
+  if (btnDetalle) btnDetalle.classList.add("active");
+  if (viewDetalle) viewDetalle.classList.add("active");
+
+  renderDetalle();
+}
+
 /* ----------------------------------------------------
  * 9. Vista Detalle de datos
  * -------------------------------------------------- */
@@ -827,19 +875,42 @@ function renderComparativo() {
 function renderDetalle() {
   const cont = document.getElementById("tablaDetalle");
   const search = document.getElementById("searchDetalle");
+  const infoDiv = document.getElementById("detalleDrillInfo");
   if (!cont || !search) return;
 
   const base = getDatosFiltrados();
   if (!base.length) {
     cont.innerHTML = "<p>Sin datos para los filtros seleccionados.</p>";
+    if (infoDiv) infoDiv.textContent = "";
     return;
   }
 
-  const texto = search.value.trim().toLowerCase();
   let rows = base;
+  let textoInfo = "";
 
+  // aplicar drill-down según métrica
+  if (drillMetric === "negativas") {
+    rows = rows.filter((r) => (r.utilidad_num || 0) < 0);
+    textoInfo = "Drill-down: solo filas con utilidad negativa (según filtros actuales).";
+  } else if (drillMetric === "credito") {
+    rows = rows.filter((r) => r.tipoFactura === "Crédito");
+    textoInfo = "Drill-down: solo facturas a Crédito (según filtros actuales).";
+  } else if (drillMetric === "ventas") {
+    textoInfo = "Drill-down: detalle de ventas (solo filtros globales).";
+  } else if (drillMetric === "utilidad") {
+    textoInfo = "Drill-down: detalle de utilidad bruta (solo filtros globales).";
+  } else if (drillMetric === "margen") {
+    textoInfo = "Drill-down: detalle para analizar margen (solo filtros globales).";
+  } else {
+    textoInfo = "";
+  }
+
+  if (infoDiv) infoDiv.textContent = textoInfo;
+
+  // filtro por texto
+  const texto = search.value.trim().toLowerCase();
   if (texto) {
-    rows = base.filter((r) => {
+    rows = rows.filter((r) => {
       const cliente = (r["cliente"] || "").toString().toLowerCase();
       const producto = (r["producto"] || "").toString().toLowerCase();
       const factura = (r["factura"] || "").toString().toLowerCase();
@@ -853,6 +924,12 @@ function renderDetalle() {
 
   const maxRows = 500;
   const slice = rows.slice(0, maxRows);
+
+  if (!slice.length) {
+    cont.innerHTML =
+      "<p>Sin filas para mostrar con el drill-down y búsqueda aplicada.</p>";
+    return;
+  }
 
   let html = `
     <table class="tabla-detalle">
