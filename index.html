@@ -155,6 +155,37 @@
       text-align: left;
     }
 
+    /* Encabezados de detalle con filtros */
+    .tabla-detalle th {
+      vertical-align: top;
+    }
+
+    .th-sort {
+      background: none;
+      border: none;
+      color: #9ca3af;
+      font-size: 0.7rem;
+      margin-left: 0.25rem;
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .th-sort.active {
+      color: #e5e7eb;
+    }
+
+    .detalle-filter {
+      width: 100%;
+      box-sizing: border-box;
+      margin-top: 0.25rem;
+      background: #020617;
+      border-radius: 0.35rem;
+      border: 1px solid #1f2937;
+      color: #e5e7eb;
+      font-size: 0.75rem;
+      padding: 0.15rem 0.25rem;
+    }
+
     canvas {
       background: #020617;
       border-radius: 0.75rem;
@@ -202,7 +233,7 @@
       color: #9ca3af;
     }
 
-    /* --------- Chips desplegables para filtros ---------- */
+    /* --------- Chips desplegables para filtros superiores ---------- */
 
     .chip-select-wrapper {
       position: relative;
@@ -274,6 +305,90 @@
       border-bottom: 1px solid #1f2937;
       margin-bottom: 0.25rem;
     }
+
+    /* --------- Layout Detalle: panel de columnas + tabla ---------- */
+
+    #detalle-layout {
+      display: flex;
+      gap: 1rem;
+    }
+
+    #detalle-column-picker {
+      width: 230px;
+      max-height: 480px;
+      overflow-y: auto;
+      background: #020617;
+      border-radius: 0.75rem;
+      border: 1px solid #1f2937;
+      padding: 0.6rem 0.7rem;
+      flex-shrink: 0;
+    }
+
+    #detalle-main {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .col-picker-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-bottom: 0.15rem;
+    }
+
+    .col-picker-help {
+      font-size: 0.75rem;
+      color: #9ca3af;
+      margin-bottom: 0.4rem;
+    }
+
+    .col-picker-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .col-picker-item {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.2rem 0.35rem;
+      border-radius: 0.5rem;
+      cursor: grab;
+      border: 1px solid transparent;
+      font-size: 0.8rem;
+    }
+
+    .col-picker-item.active {
+      background: #111827;
+      border-color: #1f2937;
+    }
+
+    .col-picker-item.dragging {
+      opacity: 0.6;
+    }
+
+    .col-picker-handle {
+      font-size: 0.7rem;
+      opacity: 0.7;
+    }
+
+    .col-picker-label {
+      flex: 1;
+    }
+
+    .col-picker-check {
+      pointer-events: auto;
+    }
+
+    @media (max-width: 900px) {
+      #detalle-layout {
+        flex-direction: column;
+      }
+      #detalle-column-picker {
+        width: 100%;
+        max-height: 220px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -297,7 +412,7 @@
 
     <div>
       <label for="filtroAlmacen">Almacén:</label><br />
-      <select id="filtroAlmacen" multiple size="4"></select>
+      <select id="filtroAlmacen"></select>
     </div>
 
     <div>
@@ -307,7 +422,7 @@
 
     <div>
       <label for="filtroCategoria">Categoría:</label><br />
-      <select id="filtroCategoria" multiple size="4"></select>
+      <select id="filtroCategoria"></select>
     </div>
 
     <div style="align-self:flex-end;">
@@ -346,7 +461,7 @@
   <div id="view-comparativo" class="view">
     <p class="help-text">
       Comparación 2024 vs 2025 aplicando los filtros de almacén, tipo de factura, categoría y el switch de AD.
-      El filtro de año se ignora en esta vista. Doble clic en una métrica para ver el detalle.
+      El filtro de año se ignora en esta vista. Doble clic en una métrica para ver el detalle en una ventana nueva.
     </p>
     <div id="tablaComparativoGlobal"></div>
     <canvas id="graficoComparativoSucursales"></canvas>
@@ -361,11 +476,19 @@
         <input type="text" id="searchDetalle" placeholder="Escribe texto para filtrar..." />
       </div>
       <div class="help-text">
-        Se muestran hasta 500 filas según filtros y búsqueda.
+        Se muestran hasta 500 filas según filtros, búsqueda y filtros por columna.
       </div>
     </div>
-    <div id="detalleDrillInfo" class="help-text"></div>
-    <div id="tablaDetalle"></div>
+
+    <div id="detalle-layout">
+      <div id="detalle-column-picker">
+        <!-- se llena por JS -->
+      </div>
+      <div id="detalle-main">
+        <div id="detalleDrillInfo" class="help-text"></div>
+        <div id="tablaDetalle"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Librerías y JS -->
