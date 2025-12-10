@@ -14,15 +14,8 @@
       color: #e5e7eb;
     }
 
-    h1 {
-      margin-bottom: 0.25rem;
-    }
-
-    p {
-      margin-top: 0;
-      color: #9ca3af;
-      font-size: 0.9rem;
-    }
+    h1 { margin-bottom: 0.25rem; }
+    p  { margin-top: 0; color: #9ca3af; font-size: 0.9rem; }
 
     #top-bar {
       display: flex;
@@ -33,9 +26,7 @@
       margin-bottom: 0.75rem;
     }
 
-    #top-bar input[type="file"] {
-      font-size: 0.85rem;
-    }
+    #top-bar input[type="file"] { font-size: 0.85rem; }
 
     #filtros {
       display: flex;
@@ -82,13 +73,8 @@
       border-bottom: 1px solid #020617;
     }
 
-    .view {
-      display: none;
-    }
-
-    .view.active {
-      display: block;
-    }
+    .view { display: none; }
+    .view.active { display: block; }
 
     #kpi-global {
       display: grid;
@@ -117,22 +103,12 @@
       color: #e5e7eb;
     }
 
-    #tablaSucursales {
-      margin-bottom: 1.5rem;
-    }
-
     .tabla-sucursales,
     .tabla-detalle,
     .tabla-comparativo {
       width: 100%;
       border-collapse: collapse;
       font-size: 0.85rem;
-    }
-
-    .tabla-sucursales thead,
-    .tabla-detalle thead,
-    .tabla-comparativo thead {
-      background: #020617;
     }
 
     .tabla-sucursales th,
@@ -148,17 +124,20 @@
 
     .tabla-sucursales th:first-child,
     .tabla-sucursales td:first-child,
-    .tabla-detalle th:first-child,
-    .tabla-detalle td:first-child,
+    .tabla-detalle   th:first-child,
+    .tabla-detalle   td:first-child,
     .tabla-comparativo th:first-child,
     .tabla-comparativo td:first-child {
       text-align: left;
     }
 
-    /* Encabezados de detalle con filtros */
-    .tabla-detalle th {
-      vertical-align: top;
+    .tabla-sucursales thead,
+    .tabla-detalle thead,
+    .tabla-comparativo thead {
+      background: #020617;
     }
+
+    .tabla-detalle th { vertical-align: top; }
 
     .th-sort {
       background: none;
@@ -169,10 +148,7 @@
       cursor: pointer;
       padding: 0;
     }
-
-    .th-sort.active {
-      color: #e5e7eb;
-    }
+    .th-sort.active { color: #e5e7eb; }
 
     .detalle-filter {
       width: 100%;
@@ -213,27 +189,18 @@
       min-width: 220px;
     }
 
-    .help-text {
-      font-size: 0.75rem;
-      color: #9ca3af;
-    }
+    .help-text { font-size: 0.75rem; color: #9ca3af; }
 
     .delta {
       font-size: 0.8rem;
       font-weight: 600;
       margin-left: 0.25rem;
     }
-    .delta-up {
-      color: #22c55e;
-    }
-    .delta-down {
-      color: #ef4444;
-    }
-    .delta-flat {
-      color: #9ca3af;
-    }
+    .delta-up   { color: #22c55e; }
+    .delta-down { color: #ef4444; }
+    .delta-flat { color: #9ca3af; }
 
-    /* --------- Chips desplegables para filtros superiores ---------- */
+    /* Chips filtros superiores */
 
     .chip-select-wrapper {
       position: relative;
@@ -280,9 +247,7 @@
       z-index: 50;
     }
 
-    .chip-select-dropdown.open {
-      display: block;
-    }
+    .chip-select-dropdown.open { display: block; }
 
     .chip-option {
       padding: 0.35rem 0.75rem;
@@ -291,103 +256,51 @@
       color: #e5e7eb;
     }
 
-    .chip-option:hover {
-      background: #111827;
-    }
+    .chip-option:hover    { background: #111827; }
+    .chip-option.selected { background: #1f2937; }
 
-    .chip-option.selected {
-      background: #1f2937;
-    }
+    /* Paleta de encabezados (detalle) */
 
-    .chip-option-todos {
-      font-weight: 600;
-      color: #a5b4fc;
-      border-bottom: 1px solid #1f2937;
-      margin-bottom: 0.25rem;
-    }
-
-    /* --------- Layout Detalle: panel de columnas + tabla ---------- */
-
-    #detalle-layout {
-      display: flex;
-      gap: 1rem;
-    }
-
-    #detalle-column-picker {
-      width: 230px;
-      max-height: 480px;
-      overflow-y: auto;
+    #detalle-field-palette-wrapper {
       background: #020617;
       border-radius: 0.75rem;
       border: 1px solid #1f2937;
-      padding: 0.6rem 0.7rem;
-      flex-shrink: 0;
+      padding: 0.5rem 0.7rem;
+      margin-bottom: 0.6rem;
     }
 
-    #detalle-main {
-      flex: 1;
-      min-width: 0;
-    }
+    .palette-title { font-size: 0.8rem; font-weight: 600; margin-bottom: 0.15rem; }
+    .palette-help  { font-size: 0.75rem; color: #9ca3af; margin-bottom: 0.35rem; }
 
-    .col-picker-title {
-      font-size: 0.8rem;
-      font-weight: 600;
-      margin-bottom: 0.15rem;
-    }
-
-    .col-picker-help {
-      font-size: 0.75rem;
-      color: #9ca3af;
-      margin-bottom: 0.4rem;
-    }
-
-    .col-picker-list {
+    .palette-chips {
       display: flex;
-      flex-direction: column;
-      gap: 0.25rem;
+      flex-wrap: wrap;
+      gap: 0.3rem;
     }
 
-    .col-picker-item {
-      display: flex;
-      align-items: center;
-      gap: 0.35rem;
-      padding: 0.2rem 0.35rem;
-      border-radius: 0.5rem;
-      cursor: grab;
-      border: 1px solid transparent;
-      font-size: 0.8rem;
-    }
-
-    .col-picker-item.active {
+    .field-chip {
+      padding: 0.2rem 0.5rem;
+      border-radius: 999px;
       background: #111827;
-      border-color: #1f2937;
+      border: 1px solid #1f2937;
+      font-size: 0.75rem;
+      cursor: grab;
+      user-select: none;
+      white-space: nowrap;
     }
 
-    .col-picker-item.dragging {
-      opacity: 0.6;
+    .field-chip.assigned {
+      border-color: #6366f1;
+      color: #c7d2fe;
     }
 
-    .col-picker-handle {
-      font-size: 0.7rem;
-      opacity: 0.7;
-    }
-
-    .col-picker-label {
-      flex: 1;
-    }
-
-    .col-picker-check {
-      pointer-events: auto;
+    th.drop-target {
+      outline: 2px dashed #6366f1;
+      outline-offset: -3px;
     }
 
     @media (max-width: 900px) {
-      #detalle-layout {
-        flex-direction: column;
-      }
-      #detalle-column-picker {
-        width: 100%;
-        max-height: 220px;
-      }
+      body { padding: 0.75rem 1rem; }
     }
   </style>
 </head>
@@ -403,7 +316,7 @@
     </div>
   </div>
 
-  <!-- Filtros -->
+  <!-- Filtros superiores -->
   <section id="filtros">
     <div>
       <label for="filtroAnio">Año:</label><br />
@@ -461,7 +374,7 @@
   <div id="view-comparativo" class="view">
     <p class="help-text">
       Comparación 2024 vs 2025 aplicando los filtros de almacén, tipo de factura, categoría y el switch de AD.
-      El filtro de año se ignora en esta vista. Doble clic en una métrica para ver el detalle en una ventana nueva.
+      El filtro de año se ignora en esta vista. Doble clic en una métrica para ver el detalle por categoría año vs año.
     </p>
     <div id="tablaComparativoGlobal"></div>
     <canvas id="graficoComparativoSucursales"></canvas>
@@ -476,22 +389,24 @@
         <input type="text" id="searchDetalle" placeholder="Escribe texto para filtrar..." />
       </div>
       <div class="help-text">
-        Se muestran hasta 500 filas según filtros, búsqueda y filtros por columna.
+        Tabla con 7 columnas. Arrastra un encabezado de la paleta hacia una columna para cambiarla.
       </div>
     </div>
 
-    <div id="detalle-layout">
-      <div id="detalle-column-picker">
-        <!-- se llena por JS -->
+    <div id="detalle-field-palette-wrapper">
+      <div class="palette-title">Encabezados disponibles</div>
+      <div class="palette-help">
+        Arrastra un encabezado y suéltalo sobre cualquiera de las 7 columnas de la tabla inferior.
       </div>
-      <div id="detalle-main">
-        <div id="detalleDrillInfo" class="help-text"></div>
-        <div id="tablaDetalle"></div>
-      </div>
+      <div id="detalle-field-palette" class="palette-chips"></div>
+    </div>
+
+    <div id="detalle-main">
+      <div id="detalleDrillInfo" class="help-text"></div>
+      <div id="tablaDetalle"></div>
     </div>
   </div>
 
-  <!-- Librerías y JS -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="dashboard_imc.js"></script>
