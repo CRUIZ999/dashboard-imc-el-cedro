@@ -1,6 +1,5 @@
 // dashboard_imc.js
 // Dashboard IMC – Rentabilidad y Calidad de Datos
-// Requiere: PapaParse (CDN) y Chart.js (CDN)
 
 let dataRaw = [];
 let dataClean = [];
@@ -29,7 +28,7 @@ document.addEventListener("DOMContentLoaded", () => {
           dataRaw = results.data || [];
           dataClean = limpiarDatos(dataRaw);
           inicializarFiltros(dataClean);
-          renderizarDashboard(); // vista Resumen por defecto
+          renderizarDashboard();
         },
       });
     });
@@ -99,6 +98,17 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   });
+
+  // Delegación de doble clic en tabla comparativo (drill-down)
+  const contComparativo = document.getElementById("tablaComparativoGlobal");
+  if (contComparativo) {
+    contComparativo.addEventListener("dblclick", (e) => {
+      const tr = e.target.closest("tr[data-metric]");
+      if (!tr) return;
+      const metricKey = tr.getAttribute("data-metric");
+      handleComparativoDblClick(metricKey);
+    });
+  }
 });
 
 /* ----------------------------------------------------
@@ -201,7 +211,7 @@ function limpiarDatos(rows) {
 }
 
 /* ----------------------------------------------------
- * 2. Inicializar filtros dinámicos
+ * 2. Inicializar filtros + chips
  * -------------------------------------------------- */
 
 function inicializarFiltros(data) {
@@ -224,6 +234,12 @@ function inicializarFiltros(data) {
   if (chkExcluirAD && chkExcluirAD.checked === false) {
     chkExcluirAD.checked = true;
   }
+
+  // Activar chips
+  initChipSingleSelect("filtroAnio", "Todos los años");
+  initChipSingleSelect("filtroTipoFactura", "Contado + Crédito");
+  initChipMultiSelect("filtroAlmacen");
+  initChipMultiSelect("filtroCategoria");
 }
 
 function poblarFiltroAnio(data) {
@@ -259,12 +275,6 @@ function poblarFiltroMultiples(data, campo, idSelect) {
   if (!sel) return;
   sel.innerHTML = "";
 
-  // opción visual "Todos"
-  const optTodos = document.createElement("option");
-  optTodos.value = "__todos__";
-  optTodos.textContent = "Todos";
-  sel.appendChild(optTodos);
-
   const valores = Array.from(
     new Set(
       data
@@ -281,6 +291,163 @@ function poblarFiltroMultiples(data, campo, idSelect) {
   });
 }
 
+/* ---------- Chips helpers ---------- */
+
+// cerrar dropdowns al hacer clic fuera
+document.addEventListener("click", (e) => {
+  document.querySelectorAll(".chip-select-dropdown").forEach((dd) => {
+    if (!dd.parentNode.contains(e.target)) {
+      dd.classList.remove("open");
+    }
+  });
+});
+
+function initChipSingleSelect(selectId, placeholderText) {
+  const select = document.getElementById(selectId);
+  if (!select || select.dataset.chipified === "1") return;
+
+  select.style.display = "none";
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "chip-select-wrapper";
+
+  const display = document.createElement("div");
+  display.className = "chip-select-display";
+  display.innerHTML = `<span class="chip-label"></span><span class="chip-arrow">▾</span>`;
+
+  const dropdown = document.createElement("div");
+  dropdown.className = "chip-select-dropdown";
+
+  Array.from(select.options).forEach((opt) => {
+    const optDiv = document.createElement("div");
+    optDiv.className = "chip-option";
+    optDiv.textContent = opt.textContent;
+    optDiv.dataset.value = opt.value;
+
+    if (opt.selected) {
+      optDiv.classList.add("selected");
+    }
+
+    optDiv.addEventListener("click", () => {
+      Array.from(select.options).forEach((o) => (o.selected = false));
+      opt.selected = true;
+
+      dropdown.querySelectorAll(".chip-option").forEach((d) =>
+        d.classList.remove("selected")
+      );
+      optDiv.classList.add("selected");
+
+      syncSingleLabel();
+      dropdown.classList.remove("open");
+      select.dispatchEvent(new Event("change"));
+    });
+
+    dropdown.appendChild(optDiv);
+  });
+
+  function syncSingleLabel() {
+    const labelSpan = display.querySelector(".chip-label");
+    const selectedOpt = select.options[select.selectedIndex];
+    if (selectedOpt) {
+      labelSpan.textContent = selectedOpt.textContent;
+    } else {
+      labelSpan.textContent = placeholderText || "Seleccionar";
+    }
+  }
+
+  syncSingleLabel();
+
+  display.addEventListener("click", (e) => {
+    e.stopPropagation();
+    dropdown.classList.toggle("open");
+  });
+
+  wrapper.appendChild(display);
+  wrapper.appendChild(dropdown);
+  select.parentNode.insertBefore(wrapper, select.nextSibling);
+
+  select.dataset.chipified = "1";
+}
+
+function initChipMultiSelect(selectId) {
+  const select = document.getElementById(selectId);
+  if (!select || select.dataset.chipified === "1") return;
+
+  select.style.display = "none";
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "chip-select-wrapper";
+
+  const display = document.createElement("div");
+  display.className = "chip-select-display";
+  display.innerHTML = `<span class="chip-label"></span><span class="chip-arrow">▾</span>`;
+
+  const dropdown = document.createElement("div");
+  dropdown.className = "chip-select-dropdown";
+
+  // opción "Todos"
+  const optTodosDiv = document.createElement("div");
+  optTodosDiv.className = "chip-option chip-option-todos";
+  optTodosDiv.textContent = "Todos";
+  optTodosDiv.addEventListener("click", (e) => {
+    e.stopPropagation();
+    Array.from(select.options).forEach((o) => (o.selected = false));
+    dropdown.querySelectorAll(".chip-option").forEach((d) =>
+      d.classList.remove("selected")
+    );
+    syncMultiLabel();
+    dropdown.classList.remove("open");
+    select.dispatchEvent(new Event("change"));
+  });
+  dropdown.appendChild(optTodosDiv);
+
+  // opciones reales
+  Array.from(select.options).forEach((opt) => {
+    const optDiv = document.createElement("div");
+    optDiv.className = "chip-option";
+    optDiv.textContent = opt.textContent;
+    optDiv.dataset.value = opt.value;
+
+    if (opt.selected) optDiv.classList.add("selected");
+
+    optDiv.addEventListener("click", (e) => {
+      e.stopPropagation();
+      opt.selected = !opt.selected;
+      optDiv.classList.toggle("selected", opt.selected);
+      syncMultiLabel();
+      select.dispatchEvent(new Event("change"));
+    });
+
+    dropdown.appendChild(optDiv);
+  });
+
+  function syncMultiLabel() {
+    const labelSpan = display.querySelector(".chip-label");
+    const selectedOpts = Array.from(select.options).filter((o) => o.selected);
+
+    if (selectedOpts.length === 0) {
+      labelSpan.textContent = "Todos";
+    } else if (selectedOpts.length === 1) {
+      labelSpan.textContent = selectedOpts[0].textContent;
+    } else {
+      labelSpan.textContent = `${selectedOpts.length} seleccionados`;
+    }
+  }
+
+  syncMultiLabel();
+
+  display.addEventListener("click", (e) => {
+    e.stopPropagation();
+    dropdown.classList.toggle("open");
+  });
+
+  wrapper.appendChild(display);
+  wrapper.appendChild(dropdown);
+  select.parentNode.insertBefore(wrapper, select.nextSibling);
+
+  select.dataset.chipified = "1";
+}
+
 /* ----------------------------------------------------
  * 3. Filtros de datos
  * -------------------------------------------------- */
@@ -288,14 +455,7 @@ function poblarFiltroMultiples(data, campo, idSelect) {
 function getValoresMultiples(idSelect) {
   const el = document.getElementById(idSelect);
   if (!el) return [];
-  const vals = Array.from(el.selectedOptions || []).map((o) => o.value);
-
-  // Si está seleccionado "Todos" ⇒ no filtrar
-  if (vals.includes("__todos__")) {
-    return [];
-  }
-
-  return vals.filter((v) => v !== "__todos__");
+  return Array.from(el.selectedOptions || []).map((o) => o.value);
 }
 
 function getDatosFiltrados() {
@@ -322,7 +482,7 @@ function getDatosFiltrados() {
   });
 }
 
-// Filtrado sin aplicar año (para comparativo YoY)
+// Filtrado sin año (para comparativo YoY)
 function getDatosFiltradosSinAnio() {
   if (!Array.isArray(dataClean) || dataClean.length === 0) return [];
 
@@ -345,7 +505,7 @@ function getDatosFiltradosSinAnio() {
 }
 
 /* ----------------------------------------------------
- * 4. Cálculo de KPIs
+ * 4. KPIs y agrupación
  * -------------------------------------------------- */
 
 function calcularKpis(rows) {
@@ -369,10 +529,6 @@ function calcularKpis(rows) {
 
   return { ventas, utilidad, margen, pctCredito, pctNegativas };
 }
-
-/* ----------------------------------------------------
- * 5. Agrupación por sucursal y formateos
- * -------------------------------------------------- */
 
 function agruparPorSucursal(rows) {
   const mapa = {};
@@ -414,7 +570,7 @@ function formatPorcentaje(valor) {
 }
 
 /* ----------------------------------------------------
- * 6. Vista Resumen
+ * 5. Vista Resumen
  * -------------------------------------------------- */
 
 function actualizarKpiCards(kpi) {
@@ -501,7 +657,7 @@ function renderTablaSucursales(rows) {
 }
 
 /* ----------------------------------------------------
- * 7. Gráficos básicos (vista Resumen)
+ * 6. Gráficos Resumen
  * -------------------------------------------------- */
 
 function destruirChart(chartRef) {
@@ -655,7 +811,7 @@ function renderGraficoDiaSemana(rows) {
 }
 
 /* ----------------------------------------------------
- * 8. Vista Comparativo YoY
+ * 7. Comparativo YoY + drill-down
  * -------------------------------------------------- */
 
 function buildDeltaHtml(valorAnterior, valorActual) {
@@ -699,7 +855,6 @@ function renderComparativo() {
   const k24 = calcularKpis(rows2024);
   const k25 = calcularKpis(rows2025);
 
-  // Tabla global con data-metric para drill-down
   let html = `
     <table class="tabla-comparativo">
       <thead>
@@ -745,17 +900,6 @@ function renderComparativo() {
     </table>
   `;
   contTabla.innerHTML = html;
-
-  // activar drill-down por doble clic
-  const filas = contTabla.querySelectorAll("tbody tr");
-  filas.forEach((tr) => {
-    const metricKey = tr.getAttribute("data-metric");
-    tr.style.cursor = "pointer";
-    tr.title = "Doble clic para ver detalle de esta métrica";
-    tr.addEventListener("dblclick", () => {
-      handleComparativoDblClick(metricKey);
-    });
-  });
 
   // Gráfico comparativo por sucursal
   const mapaSuc = {};
@@ -851,9 +995,9 @@ function renderComparativo() {
 }
 
 function handleComparativoDblClick(metricKey) {
-  drillMetric = metricKey; // guardar qué métrica eligió el usuario
+  if (!metricKey) return;
+  drillMetric = metricKey;
 
-  // Activar pestaña "Detalle de datos"
   const tabButtons = document.querySelectorAll(".tab-btn");
   const views = document.querySelectorAll(".view");
   tabButtons.forEach((b) => b.classList.remove("active"));
@@ -869,7 +1013,7 @@ function handleComparativoDblClick(metricKey) {
 }
 
 /* ----------------------------------------------------
- * 9. Vista Detalle de datos
+ * 8. Vista Detalle
  * -------------------------------------------------- */
 
 function renderDetalle() {
@@ -888,7 +1032,6 @@ function renderDetalle() {
   let rows = base;
   let textoInfo = "";
 
-  // aplicar drill-down según métrica
   if (drillMetric === "negativas") {
     rows = rows.filter((r) => (r.utilidad_num || 0) < 0);
     textoInfo = "Drill-down: solo filas con utilidad negativa (según filtros actuales).";
@@ -907,7 +1050,6 @@ function renderDetalle() {
 
   if (infoDiv) infoDiv.textContent = textoInfo;
 
-  // filtro por texto
   const texto = search.value.trim().toLowerCase();
   if (texto) {
     rows = rows.filter((r) => {
@@ -983,7 +1125,7 @@ function renderDetalle() {
 }
 
 /* ----------------------------------------------------
- * 10. Render general (vista Resumen)
+ * 9. Render general (Resumen)
  * -------------------------------------------------- */
 
 function renderizarDashboard() {
