@@ -1,591 +1,302 @@
-// dashboard_imc.js
-// Dashboard IMC – Rentabilidad y Calidad de Datos
-// Requiere: PapaParse (CDN) y Chart.js (CDN)
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dashboard IMC – Ferretería El Cedro</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-let dataRaw = [];
-let dataClean = [];
-let charts = {
-  categorias: null,
-  sucursales: null,
-  diaSemana: null,
-};
-
-document.addEventListener("DOMContentLoaded", () => {
-  const fileInput = document.getElementById("fileInput");
-
-  if (fileInput) {
-    fileInput.addEventListener("change", (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      Papa.parse(file, {
-        header: true,
-        dynamicTyping: false,
-        skipEmptyLines: true,
-        complete: (results) => {
-          dataRaw = results.data || [];
-          dataClean = limpiarDatos(dataRaw);
-          inicializarFiltros(dataClean);
-          renderizarDashboard();
-        },
-      });
-    });
-  }
-
-  // Listeners de filtros
-  const filtroIds = [
-    "filtroAnio",
-    "filtroAlmacen",
-    "filtroTipoFactura",
-    "filtroCategoria",
-    "chkExcluirAD",
-  ];
-
-  filtroIds.forEach((id) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-
-    el.addEventListener("change", () => {
-      renderizarDashboard();
-    });
-  });
-});
-
-/* ----------------------------------------------------
- * 1. Limpieza y normalización de datos
- * -------------------------------------------------- */
-
-function normalizarFiltro3(valor) {
-  if (!valor) return "";
-  let v = String(valor).trim();
-  if (v === "PROMOCIÃ“N") return "PROMOCIÓN";
-  if (v === "UNIDAD DE CONVERSIÃ“N") return "UNIDAD DE CONVERSIÓN";
-  return v;
-}
-
-/**
- * parseFechaCedro
- *  - 2024: dd/mm/yyyy
- *  - 2025: mm/dd/yyyy
- */
-function parseFechaCedro(fechaStr) {
-  if (!fechaStr) return null;
-  const partes = fechaStr.split(/[/-]/).map((x) => parseInt(x, 10));
-  if (partes.length !== 3 || isNaN(partes[0]) || isNaN(partes[1]) || isNaN(partes[2])) {
-    return null;
-  }
-  const [p1, p2, year] = partes;
-
-  let day, month;
-  if (year === 2024) {
-    // dd/mm/yyyy
-    day = p1;
-    month = p2;
-  } else if (year === 2025) {
-    // mm/dd/yyyy
-    month = p1;
-    day = p2;
-  } else {
-    // fallback: dd/mm/yyyy
-    day = p1;
-    month = p2;
-  }
-
-  return new Date(year, month - 1, day);
-}
-
-function parseNumero(valor) {
-  if (valor === null || valor === undefined) return 0;
-  const limpio = String(valor).replace(/\$/g, "").replace(/,/g, "").trim();
-  if (limpio === "") return 0;
-  const num = parseFloat(limpio);
-  return isNaN(num) ? 0 : num;
-}
-
-function limpiarDatos(rows) {
-  return rows
-    .map((r) => {
-      const filtro3Norm = normalizarFiltro3(r["filtro3"] || r["filtro_3"] || r["AD"] || "");
-      const fechaObj = parseFechaCedro(r["fecha"]);
-      const year = fechaObj ? fechaObj.getFullYear() : null;
-      const diaSemana = fechaObj
-        ? fechaObj.toLocaleDateString("es-MX", { weekday: "short" })
-        : "";
-
-      const subt = parseNumero(r["subt_fac"]);
-      const util = parseNumero(r["utilidad"]);
-
-      const tipoFactura = r["Tipo de Factura"] || r["tipo_factura"] || "";
-      const almacen = r["almacen"] || "";
-      const categoria = r["categoria"] || "";
-      const margen_calc = subt !== 0 ? util / subt : 0;
-
-      const esAdEspecial = [
-        "BASE",
-        "LIQUIDACION",
-        "PROMOCIÓN",
-        "RANGO",
-        "UNIDAD DE CONVERSIÓN",
-      ].includes(filtro3Norm);
-
-      return {
-        ...r,
-        filtro3_norm: filtro3Norm,
-        esAdEspecial,
-        fechaObj,
-        year,
-        diaSemana,
-        subt_fac_num: subt,
-        utilidad_num: util,
-        margen_calc,
-        tipoFactura,
-        almacen,
-        categoria,
-      };
-    })
-    .filter((r) => r.fechaObj && r.year);
-}
-
-/* ----------------------------------------------------
- * 2. Inicializar filtros dinámicos
- * -------------------------------------------------- */
-
-function inicializarFiltros(data) {
-  poblarFiltroAnio(data);
-  poblarFiltroMultiples(data, "almacen", "filtroAlmacen");
-  poblarFiltroMultiples(data, "categoria", "filtroCategoria");
-
-  const selTipo = document.getElementById("filtroTipoFactura");
-  if (selTipo && selTipo.options.length === 0) {
-    ["todos", "Contado", "Crédito"].forEach((valor) => {
-      const opt = document.createElement("option");
-      opt.value = valor === "todos" ? "todos" : valor;
-      opt.textContent =
-        valor === "todos" ? "Contado + Crédito" : valor;
-      selTipo.appendChild(opt);
-    });
-  }
-
-  const chkExcluirAD = document.getElementById("chkExcluirAD");
-  if (chkExcluirAD && chkExcluirAD.checked === false) {
-    chkExcluirAD.checked = true;
-  }
-}
-
-function poblarFiltroAnio(data) {
-  const sel = document.getElementById("filtroAnio");
-  if (!sel) return;
-  sel.innerHTML = "";
-
-  const years = Array.from(
-    new Set(
-      data
-        .map((r) => r.year)
-        .filter((y) => y === 2024 || y === 2025)
-    )
-  ).sort();
-
-  const optTodos = document.createElement("option");
-  optTodos.value = "todos";
-  optTodos.textContent = "Todos los años";
-  sel.appendChild(optTodos);
-
-  years.forEach((y) => {
-    const opt = document.createElement("option");
-    opt.value = String(y);
-    opt.textContent = String(y);
-    sel.appendChild(opt);
-  });
-
-  sel.value = "todos";
-}
-
-function poblarFiltroMultiples(data, campo, idSelect) {
-  const sel = document.getElementById(idSelect);
-  if (!sel) return;
-  sel.innerHTML = "";
-
-  const valores = Array.from(
-    new Set(
-      data
-        .map((r) => r[campo])
-        .filter((v) => v !== null && v !== undefined && String(v).trim() !== "")
-    )
-  ).sort();
-
-  valores.forEach((v) => {
-    const opt = document.createElement("option");
-    opt.value = String(v);
-    opt.textContent = String(v);
-    sel.appendChild(opt);
-  });
-}
-
-/* ----------------------------------------------------
- * 3. Filtros de datos
- * -------------------------------------------------- */
-
-function getValoresMultiples(idSelect) {
-  const el = document.getElementById(idSelect);
-  if (!el) return [];
-  return Array.from(el.selectedOptions || []).map((o) => o.value);
-}
-
-function getDatosFiltrados() {
-  if (!Array.isArray(dataClean) || dataClean.length === 0) return [];
-
-  const selAnio = document.getElementById("filtroAnio");
-  const selTipo = document.getElementById("filtroTipoFactura");
-  const chkAD = document.getElementById("chkExcluirAD");
-
-  const anio = selAnio ? selAnio.value : "todos";
-  const tipo = selTipo ? selTipo.value : "todos";
-  const excluirAD = chkAD ? chkAD.checked : false;
-
-  const almacenesSel = getValoresMultiples("filtroAlmacen");
-  const categoriasSel = getValoresMultiples("filtroCategoria");
-
-  return dataClean.filter((r) => {
-    if (excluirAD && r.esAdEspecial) return false;
-    if (anio !== "todos" && String(r.year) !== anio) return false;
-    if (tipo !== "todos" && r.tipoFactura !== tipo) return false;
-    if (almacenesSel.length > 0 && !almacenesSel.includes(r.almacen)) return false;
-    if (categoriasSel.length > 0 && !categoriasSel.includes(r.categoria)) return false;
-    return true;
-  });
-}
-
-/* ----------------------------------------------------
- * 4. Cálculo de KPIs
- * -------------------------------------------------- */
-
-function calcularKpis(rows) {
-  let ventas = 0;
-  let utilidad = 0;
-  let ventasCredito = 0;
-  let ventasNegativas = 0;
-
-  rows.forEach((r) => {
-    const v = r.subt_fac_num || 0;
-    const u = r.utilidad_num || 0;
-    ventas += v;
-    utilidad += u;
-    if (r.tipoFactura === "Crédito") ventasCredito += v;
-    if (u < 0) ventasNegativas += v;
-  });
-
-  const margen = ventas > 0 ? utilidad / ventas : 0;
-  const pctCredito = ventas > 0 ? ventasCredito / ventas : 0;
-  const pctNegativas = ventas > 0 ? ventasNegativas / ventas : 0;
-
-  return { ventas, utilidad, margen, pctCredito, pctNegativas };
-}
-
-/* ----------------------------------------------------
- * 5. Tabla por sucursal
- * -------------------------------------------------- */
-
-function agruparPorSucursal(rows) {
-  const mapa = {};
-  rows.forEach((r) => {
-    const alm = r.almacen || "SIN_ALMACEN";
-    if (!mapa[alm]) {
-      mapa[alm] = {
-        almacen: alm,
-        ventas: 0,
-        utilidad: 0,
-        ventasNegativas: 0,
-      };
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 1rem 2rem;
+      background: #0b1120;
+      color: #e5e7eb;
     }
-    mapa[alm].ventas += r.subt_fac_num || 0;
-    mapa[alm].utilidad += r.utilidad_num || 0;
-    if (r.utilidad_num < 0) {
-      mapa[alm].ventasNegativas += r.subt_fac_num || 0;
+
+    h1 {
+      margin-bottom: 0.25rem;
     }
-  });
 
-  const lista = Object.values(mapa);
-  lista.forEach((s) => {
-    s.margen = s.ventas > 0 ? s.utilidad / s.ventas : 0;
-    s.pctNegativas = s.ventas > 0 ? s.ventasNegativas / s.ventas : 0;
-  });
+    p {
+      margin-top: 0;
+      color: #9ca3af;
+      font-size: 0.9rem;
+    }
 
-  lista.sort((a, b) => b.ventas - a.ventas);
-  return lista;
-}
+    #top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.75rem;
+    }
 
-function formatMoneda(valor) {
-  if (!isFinite(valor)) return "$0";
-  return "$" + valor.toLocaleString("es-MX", { maximumFractionDigits: 0 });
-}
+    #top-bar input[type="file"] {
+      font-size: 0.85rem;
+    }
 
-function formatPorcentaje(valor) {
-  if (!isFinite(valor)) return "0%";
-  return (valor * 100).toFixed(1) + "%";
-}
+    #filtros {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin: 0.5rem 0 0.75rem;
+      padding: 0.75rem 1rem;
+      background: #020617;
+      border-radius: 0.75rem;
+      border: 1px solid #1f2937;
+    }
 
-function renderTablaSucursales(rows) {
-  const contenedor = document.getElementById("tablaSucursales");
-  if (!contenedor) return;
-  if (!rows || rows.length === 0) {
-    contenedor.innerHTML = "<p>Sin datos para los filtros seleccionados.</p>";
-    return;
-  }
+    #filtros select,
+    #filtros input[type="checkbox"] {
+      padding: 0.15rem 0.4rem;
+      border-radius: 0.5rem;
+      border: 1px solid #4b5563;
+      background: #111827;
+      color: #e5e7eb;
+      font-size: 0.85rem;
+    }
 
-  const sucursales = agruparPorSucursal(rows);
+    #tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin: 0.5rem 0 1rem;
+      border-bottom: 1px solid #1f2937;
+    }
 
-  let html = `
-    <table class="tabla-sucursales">
-      <thead>
-        <tr>
-          <th>Sucursal</th>
-          <th>Ventas (Subtotal)</th>
-          <th>Utilidad</th>
-          <th>Margen Bruto %</th>
-          <th>% Ventas con Utilidad Negativa</th>
-        </tr>
-      </thead>
-      <tbody>
-  `;
+    .tab-btn {
+      padding: 0.4rem 0.9rem;
+      border: none;
+      background: transparent;
+      color: #9ca3af;
+      font-size: 0.85rem;
+      cursor: pointer;
+      border-radius: 0.5rem 0.5rem 0 0;
+    }
 
-  sucursales.forEach((s) => {
-    html += `
-      <tr>
-        <td>${s.almacen}</td>
-        <td>${formatMoneda(s.ventas)}</td>
-        <td>${formatMoneda(s.utilidad)}</td>
-        <td>${formatPorcentaje(s.margen)}</td>
-        <td>${formatPorcentaje(s.pctNegativas)}</td>
-      </tr>
-    `;
-  });
+    .tab-btn.active {
+      background: #020617;
+      color: #e5e7eb;
+      border: 1px solid #1f2937;
+      border-bottom: 1px solid #020617;
+    }
 
-  html += "</tbody></table>";
-  contenedor.innerHTML = html;
-}
+    .view {
+      display: none;
+    }
 
-/* ----------------------------------------------------
- * 6. Gráficos (Chart.js)
- * -------------------------------------------------- */
+    .view.active {
+      display: block;
+    }
 
-function destruirChart(chartRef) {
-  if (chartRef && typeof chartRef.destroy === "function") {
-    chartRef.destroy();
-  }
-}
+    #kpi-global {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
 
-function renderGraficoCategorias(rows) {
-  const ctx = document.getElementById("graficoCategorias");
-  if (!ctx) return;
+    .card {
+      background: #020617;
+      border-radius: 0.75rem;
+      padding: 0.6rem 0.8rem;
+      border: 1px solid #1f2937;
+    }
 
-  const mapa = {};
-  rows.forEach((r) => {
-    const cat = r.categoria || "SIN CATEGORIA";
-    if (!mapa[cat]) mapa[cat] = 0;
-    mapa[cat] += r.subt_fac_num || 0;
-  });
+    .card h3 {
+      margin: 0;
+      font-size: 0.85rem;
+      color: #9ca3af;
+    }
 
-  const labels = Object.keys(mapa);
-  const valores = labels.map((l) => mapa[l]);
+    .card p {
+      margin: 0.25rem 0 0;
+      font-size: 1rem;
+      font-weight: 600;
+      color: #e5e7eb;
+    }
 
-  destruirChart(charts.categorias);
+    #tablaSucursales {
+      margin-bottom: 1.5rem;
+    }
 
-  charts.categorias = new Chart(ctx, {
-    type: "bar",
-    data: {
-      labels,
-      datasets: [
-        {
-          label: "Ventas por categoría",
-          data: valores,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: (context) => {
-              const v = context.parsed.y || 0;
-              return " " + formatMoneda(v);
-            },
-          },
-        },
-      },
-      scales: {
-        y: {
-          ticks: {
-            callback: (val) => formatMoneda(val),
-          },
-        },
-      },
-    },
-  });
-}
+    .tabla-sucursales,
+    .tabla-detalle,
+    .tabla-comparativo {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
 
-function renderGraficoSucursales(rows) {
-  const ctx = document.getElementById("graficoSucursales");
-  if (!ctx) return;
+    .tabla-sucursales thead,
+    .tabla-detalle thead,
+    .tabla-comparativo thead {
+      background: #020617;
+    }
 
-  const sucursales = agruparPorSucursal(rows);
-  const labels = sucursales.map((s) => s.almacen);
-  const valores = sucursales.map((s) => s.ventas);
+    .tabla-sucursales th,
+    .tabla-sucursales td,
+    .tabla-detalle th,
+    .tabla-detalle td,
+    .tabla-comparativo th,
+    .tabla-comparativo td {
+      border: 1px solid #1f2937;
+      padding: 0.3rem 0.4rem;
+      text-align: right;
+    }
 
-  destruirChart(charts.sucursales);
+    .tabla-sucursales th:first-child,
+    .tabla-sucursales td:first-child,
+    .tabla-detalle th:first-child,
+    .tabla-detalle td:first-child,
+    .tabla-comparativo th:first-child,
+    .tabla-comparativo td:first-child {
+      text-align: left;
+    }
 
-  charts.sucursales = new Chart(ctx, {
-    type: "bar",
-    data: {
-      labels,
-      datasets: [
-        {
-          label: "Ventas por sucursal",
-          data: valores,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: (context) => " " + formatMoneda(context.parsed.y || 0),
-          },
-        },
-      },
-      scales: {
-        y: {
-          ticks: {
-            callback: (val) => formatMoneda(val),
-          },
-        },
-      },
-    },
-  });
-}
+    canvas {
+      background: #020617;
+      border-radius: 0.75rem;
+      padding: 0.6rem;
+      border: 1px solid #1f2937;
+      margin-bottom: 1.2rem;
+    }
 
-function renderGraficoDiaSemana(rows) {
-  const ctx = document.getElementById("graficoDiaSemana");
-  if (!ctx) return;
+    #view-detalle-controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
 
-  const ordenDias = ["lun", "mar", "mié", "jue", "vie", "sáb", "dom"];
-  const mapa = {};
-  ordenDias.forEach((d) => (mapa[d] = 0));
+    #searchDetalle {
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.5rem;
+      border: 1px solid #4b5563;
+      background: #111827;
+      color: #e5e7eb;
+      font-size: 0.85rem;
+      min-width: 220px;
+    }
 
-  rows.forEach((r) => {
-    const d = (r.diaSemana || "").toLowerCase().slice(0, 3);
-    if (!mapa.hasOwnProperty(d)) mapa[d] = 0;
-    mapa[d] += r.subt_fac_num || 0;
-  });
+    .help-text {
+      font-size: 0.75rem;
+      color: #9ca3af;
+    }
 
-  const labels = ordenDias;
-  const valores = labels.map((l) => mapa[l] || 0);
+    .delta {
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-left: 0.25rem;
+    }
+    .delta-up {
+      color: #22c55e;
+    }
+    .delta-down {
+      color: #ef4444;
+    }
+    .delta-flat {
+      color: #9ca3af;
+    }
+  </style>
+</head>
+<body>
+  <div id="top-bar">
+    <div>
+      <h1>Dashboard IMC – Rentabilidad y Calidad de Datos</h1>
+      <p>Sube el archivo <strong>BASE DIRECCION IMC.csv</strong>, aplica filtros y navega entre vistas.</p>
+    </div>
+    <div>
+      <label for="fileInput" style="font-size:0.85rem;">Seleccionar archivo CSV:</label><br />
+      <input type="file" id="fileInput" accept=".csv" />
+    </div>
+  </div>
 
-  destruirChart(charts.diaSemana);
+  <!-- Filtros -->
+  <section id="filtros">
+    <div>
+      <label for="filtroAnio">Año:</label><br />
+      <select id="filtroAnio"></select>
+    </div>
 
-  charts.diaSemana = new Chart(ctx, {
-    type: "bar",
-    data: {
-      labels,
-      datasets: [
-        {
-          label: "Ventas por día de la semana",
-          data: valores,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: (context) => " " + formatMoneda(context.parsed.y || 0),
-          },
-        },
-      },
-      scales: {
-        y: {
-          ticks: {
-            callback: (val) => formatMoneda(val),
-          },
-        },
-      },
-    },
-  });
-}
+    <div>
+      <label for="filtroAlmacen">Almacén:</label><br />
+      <select id="filtroAlmacen" multiple size="4"></select>
+    </div>
 
-/* ----------------------------------------------------
- * 7. Render general del dashboard
- * -------------------------------------------------- */
+    <div>
+      <label for="filtroTipoFactura">Tipo de factura:</label><br />
+      <select id="filtroTipoFactura"></select>
+    </div>
 
-function actualizarKpiCards(kpi) {
-  const kpiVentas = document.getElementById("kpiVentas");
-  const kpiUtilidad = document.getElementById("kpiUtilidad");
-  const kpiMargen = document.getElementById("kpiMargen");
-  const kpiCredito = document.getElementById("kpiCredito");
-  const kpiNegativas = document.getElementById("kpiNegativas");
+    <div>
+      <label for="filtroCategoria">Categoría:</label><br />
+      <select id="filtroCategoria" multiple size="4"></select>
+    </div>
 
-  if (kpiVentas) {
-    kpiVentas.innerHTML = `
-      <h3>Ventas IMC</h3>
-      <p>${formatMoneda(kpi.ventas)}</p>
-    `;
-  }
+    <div style="align-self:flex-end;">
+      <label>
+        <input type="checkbox" id="chkExcluirAD" checked />
+        Excluir BASE / LIQUIDACION / PROMOCIÓN / RANGO / UNIDAD CONVERSIÓN
+      </label>
+    </div>
+  </section>
 
-  if (kpiUtilidad) {
-    kpiUtilidad.innerHTML = `
-      <h3>Utilidad Bruta</h3>
-      <p>${formatMoneda(kpi.utilidad)}</p>
-    `;
-  }
+  <!-- Tabs -->
+  <div id="tabs">
+    <button class="tab-btn active" data-view="resumen">Resumen</button>
+    <button class="tab-btn" data-view="comparativo">Comparativo YoY</button>
+    <button class="tab-btn" data-view="detalle">Detalle de datos</button>
+  </div>
 
-  if (kpiMargen) {
-    kpiMargen.innerHTML = `
-      <h3>Margen Bruto</h3>
-      <p>${formatPorcentaje(kpi.margen)}</p>
-    `;
-  }
+  <!-- Vista Resumen -->
+  <div id="view-resumen" class="view active">
+    <section id="kpi-global">
+      <div class="card" id="kpiVentas"></div>
+      <div class="card" id="kpiUtilidad"></div>
+      <div class="card" id="kpiMargen"></div>
+      <div class="card" id="kpiCredito"></div>
+      <div class="card" id="kpiNegativas"></div>
+    </section>
 
-  if (kpiCredito) {
-    kpiCredito.innerHTML = `
-      <h3>% Ventas a Crédito</h3>
-      <p>${formatPorcentaje(kpi.pctCredito)}</p>
-    `;
-  }
+    <div id="tablaSucursales"></div>
 
-  if (kpiNegativas) {
-    kpiNegativas.innerHTML = `
-      <h3>% Ventas con Utilidad Negativa</h3>
-      <p>${formatPorcentaje(kpi.pctNegativas)}</p>
-    `;
-  }
-}
+    <canvas id="graficoCategorias"></canvas>
+    <canvas id="graficoSucursales"></canvas>
+    <canvas id="graficoDiaSemana"></canvas>
+  </div>
 
-function renderizarDashboard() {
-  const rowsFiltrados = getDatosFiltrados();
-  if (!rowsFiltrados || rowsFiltrados.length === 0) {
-    actualizarKpiCards({
-      ventas: 0,
-      utilidad: 0,
-      margen: 0,
-      pctCredito: 0,
-      pctNegativas: 0,
-    });
-    renderTablaSucursales([]);
-    renderGraficoCategorias([]);
-    renderGraficoSucursales([]);
-    renderGraficoDiaSemana([]);
-    return;
-  }
+  <!-- Vista Comparativo YoY -->
+  <div id="view-comparativo" class="view">
+    <p class="help-text">
+      Comparación 2024 vs 2025 aplicando los filtros de almacén, tipo de factura, categoría y el switch de AD. 
+      El filtro de año se ignora en esta vista.
+    </p>
+    <div id="tablaComparativoGlobal"></div>
+    <canvas id="graficoComparativoSucursales"></canvas>
+    <canvas id="graficoComparativoCategorias"></canvas>
+  </div>
 
-  const kpi = calcularKpis(rowsFiltrados);
-  actualizarKpiCards(kpi);
-  renderTablaSucursales(rowsFiltrados);
-  renderGraficoCategorias(rowsFiltrados);
-  renderGraficoSucursales(rowsFiltrados);
-  renderGraficoDiaSemana(rowsFiltrados);
-}
+  <!-- Vista Detalle -->
+  <div id="view-detalle" class="view">
+    <div id="view-detalle-controls">
+      <div>
+        <label for="searchDetalle">Buscar (cliente / producto / factura):</label><br />
+        <input type="text" id="searchDetalle" placeholder="Escribe texto para filtrar..." />
+      </div>
+      <div class="help-text">
+        Se muestran hasta 500 filas según filtros y búsqueda.
+      </div>
+    </div>
+    <div id="tablaDetalle"></div>
+  </div>
+
+  <!-- Librerías y JS -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="dashboard_imc.js"></script>
+</body>
+</html>
