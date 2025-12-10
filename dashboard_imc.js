@@ -130,7 +130,6 @@ const ALL_DETALLE_COLS = [
   {
     key: "margen",
     label: "Margen %",
-
     type: "number",
     value: (r) => r.margen_calc || 0,
     display: (r) => formatPorcentaje(r.margen_calc || 0),
@@ -1137,6 +1136,12 @@ function handleComparativoDblClick(metricKey) {
 
   let filasHTML = "";
   slice.forEach((g) => {
+    // NUEVO: estilos rojos para negativos en la tabla de categorías
+    const costoStyle = g.costo < 0 ? ' style="color:#ef4444;"' : "";
+    const subtotalStyle = g.subtotal < 0 ? ' style="color:#ef4444;"' : "";
+    const utilidadStyle = g.utilidad < 0 ? ' style="color:#ef4444;"' : "";
+    const margenStyle = g.margen < 0 ? ' style="color:#ef4444;"' : "";
+
     filasHTML += `
       <tr
         data-year="${g.year}"
@@ -1146,10 +1151,10 @@ function handleComparativoDblClick(metricKey) {
         <td>${g.year || ""}</td>
         <td>${escapeHtml(g.almacen || "")}</td>
         <td>${escapeHtml(g.categoria || "")}</td>
-        <td class="num" data-num="${g.costo}">${formatMoneda(g.costo)}</td>
-        <td class="num" data-num="${g.subtotal}">${formatMoneda(g.subtotal)}</td>
-        <td class="num" data-num="${g.margen}">${formatPorcentaje(g.margen)}</td>
-        <td class="num" data-num="${g.utilidad}">${formatMoneda(g.utilidad)}</td>
+        <td class="num"${costoStyle} data-num="${g.costo}">${formatMoneda(g.costo)}</td>
+        <td class="num"${subtotalStyle} data-num="${g.subtotal}">${formatMoneda(g.subtotal)}</td>
+        <td class="num"${margenStyle} data-num="${g.margen}">${formatPorcentaje(g.margen)}</td>
+        <td class="num"${utilidadStyle} data-num="${g.utilidad}">${formatMoneda(g.utilidad)}</td>
       </tr>`;
   });
 
@@ -1397,16 +1402,21 @@ window.handleCategoriaDrill = function (year, almacen, categoria, metricKey) {
     const utilNum = r.utilidad_num || 0;
     const margenNum = r.margen_calc || 0;
 
+    const costoStyle = costoNum < 0 ? ' style="color:#ef4444;"' : "";
+    const subtStyle = subtNum < 0 ? ' style="color:#ef4444;"' : "";
+    const utilStyle = utilNum < 0 ? ' style="color:#ef4444;"' : "";
+    const margenStyle = margenNum < 0 ? ' style="color:#ef4444;"' : "";
+
     filasHTML += `
       <tr>
         <td>${r.year || ""}</td>
         <td>${escapeHtml(r.almacen || "")}</td>
         <td>${escapeHtml(r.categoria || "")}</td>
         <td>${escapeHtml(articulo)}</td>
-        <td class="num" data-num="${costoNum}">${formatMoneda(costoNum)}</td>
-        <td class="num" data-num="${subtNum}">${formatMoneda(subtNum)}</td>
-        <td class="num" data-num="${margenNum}">${formatPorcentaje(margenNum)}</td>
-        <td class="num" data-num="${utilNum}">${formatMoneda(utilNum)}</td>
+        <td class="num"${costoStyle} data-num="${costoNum}">${formatMoneda(costoNum)}</td>
+        <td class="num"${subtStyle} data-num="${subtNum}">${formatMoneda(subtNum)}</td>
+        <td class="num"${margenStyle} data-num="${margenNum}">${formatPorcentaje(margenNum)}</td>
+        <td class="num"${utilStyle} data-num="${utilNum}">${formatMoneda(utilNum)}</td>
       </tr>`;
   });
 
@@ -1751,7 +1761,15 @@ function renderDetalle() {
   slice.forEach((r) => {
     html += "<tr>";
     cols.forEach((col) => {
-      html += `<td>${getColDisplay(r, col.key)}</td>`;
+      const rawVal = getColValue(r, col.key);
+      const isNumeric = col.type === "number" && typeof rawVal === "number";
+      const isNegative = isNumeric && rawVal < 0;
+      const numAttr = isNumeric ? ` data-num="${rawVal}"` : "";
+      const negStyle = isNegative ? ' style="color:#ef4444;"' : "";
+      html += `<td${numAttr}${negStyle}>${getColDisplay(
+        r,
+        col.key
+      )}</td>`;
     });
     html += "</tr>";
   });
