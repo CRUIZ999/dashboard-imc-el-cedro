@@ -1,9 +1,6 @@
-// dashboard_imc.js
 // Dashboard IMC – Rentabilidad y Calidad de Datos
 
-/* =========================================================
- *  Configuración columnas Detalle (todas las disponibles)
- * ======================================================= */
+/* ================== Config columnas detalle =================== */
 
 const ALL_DETALLE_COLS = [
   {
@@ -25,8 +22,8 @@ const ALL_DETALLE_COLS = [
     key: "hora",
     label: "Hora",
     type: "string",
-    value: (r) => r["hora"] || "",
-    display: (r) => r["hora"] || "",
+    value: (r) => r.hora || r["hora"] || "",
+    display: (r) => r.hora || r["hora"] || "",
   },
   {
     key: "almacen",
@@ -39,15 +36,15 @@ const ALL_DETALLE_COLS = [
     key: "factura",
     label: "Factura",
     type: "string",
-    value: (r) => r["factura"] || "",
-    display: (r) => r["factura"] || "",
+    value: (r) => r.factura || r["factura"] || "",
+    display: (r) => r.factura || r["factura"] || "",
   },
   {
     key: "cliente",
     label: "Cliente",
     type: "string",
-    value: (r) => r["cliente"] || "",
-    display: (r) => r["cliente"] || "",
+    value: (r) => r.cliente || r["cliente"] || "",
+    display: (r) => r.cliente || r["cliente"] || "",
   },
   {
     key: "categoria",
@@ -60,8 +57,8 @@ const ALL_DETALLE_COLS = [
     key: "producto",
     label: "Producto",
     type: "string",
-    value: (r) => r["producto"] || "",
-    display: (r) => r["producto"] || "",
+    value: (r) => r.producto || r["producto"] || "",
+    display: (r) => r.producto || r["producto"] || "",
   },
   {
     key: "tipoFactura",
@@ -81,8 +78,24 @@ const ALL_DETALLE_COLS = [
     key: "costo",
     label: "Costo",
     type: "number",
-    value: (r) => parseNumero(r["costo1"] || r["costo2"] || 0),
-    display: (r) => formatMoneda(parseNumero(r["costo1"] || r["costo2"] || 0)),
+    value: (r) =>
+      parseNumero(
+        r.costo1 ||
+          r["costo1"] ||
+          r.costo2 ||
+          r["costo2"] ||
+          0
+      ),
+    display: (r) =>
+      formatMoneda(
+        parseNumero(
+          r.costo1 ||
+            r["costo1"] ||
+            r.costo2 ||
+            r["costo2"] ||
+            0
+        )
+      ),
   },
   {
     key: "descuento",
@@ -91,10 +104,8 @@ const ALL_DETALLE_COLS = [
     value: (r) => {
       let d = 0;
       ["descuento", "descuento1", "descuento_1", "descuento2", "descuento_2"].forEach(
-        (campo) => {
-          if (r.hasOwnProperty(campo)) {
-            d += parseNumero(r[campo]);
-          }
+        (c) => {
+          if (r[c] != null) d += parseNumero(r[c]);
         }
       );
       return d;
@@ -102,10 +113,8 @@ const ALL_DETALLE_COLS = [
     display: (r) => {
       let d = 0;
       ["descuento", "descuento1", "descuento_1", "descuento2", "descuento_2"].forEach(
-        (campo) => {
-          if (r.hasOwnProperty(campo)) {
-            d += parseNumero(r[campo]);
-          }
+        (c) => {
+          if (r[c] != null) d += parseNumero(r[c]);
         }
       );
       return formatMoneda(d);
@@ -136,20 +145,21 @@ const ALL_DETALLE_COLS = [
     key: "marca",
     label: "Marca",
     type: "string",
-    value: (r) => r["marca"] || "",
-    display: (r) => r["marca"] || "",
+    value: (r) => r.marca || r["marca"] || "",
+    display: (r) => r.marca || r["marca"] || "",
   },
   {
     key: "vendedor",
     label: "Vendedor",
     type: "string",
-    value: (r) => r["vendedor"] || "",
-    display: (r) => r["vendedor"] || "",
+    value: (r) => r.vendedor || r["vendedor"] || "",
+    display: (r) => r.vendedor || r["vendedor"] || "",
   },
 ];
 
-// columnas visibles por defecto en Detalle
-let detalleActiveKeys = [
+// 7 columnas visibles (slots) iniciales
+const MAX_DETALLE_COLS = 7;
+let detalleSlotKeys = [
   "fecha",
   "almacen",
   "factura",
@@ -157,29 +167,13 @@ let detalleActiveKeys = [
   "categoria",
   "producto",
   "tipoFactura",
-  "subt_fac",
-  "utilidad",
-  "margen",
-  "filtro3",
 ];
 
-// estado para ordenar y filtrar en Detalle
-let detalleSortState = { col: null, dir: "asc" }; // 'asc' | 'desc'
-let detalleColFilters = {}; // { key: textoFiltro }
+let dragFieldKey = null;
+let detalleSortState = { col: null, dir: "asc" };
+let detalleColFilters = {};
 
-function getColByKey(key) {
-  return ALL_DETALLE_COLS.find((c) => c.key === key) || null;
-}
-
-function getActiveDetalleCols() {
-  return detalleActiveKeys
-    .map((k) => getColByKey(k))
-    .filter((c) => c !== null);
-}
-
-/* =========================================================
- *  Variables generales
- * ======================================================= */
+/* ================== Estado general =================== */
 
 let dataRaw = [];
 let dataClean = [];
@@ -190,152 +184,34 @@ let charts = {
   compSucursales: null,
   compCategorias: null,
 };
-let drillMetric = null; // métrica seleccionada desde comparativo YoY para drill-down
+let drillMetric = null;
 
-/* =========================================================
- *  Inicialización
- * ======================================================= */
+/* ================== Utilidades =================== */
 
-document.addEventListener("DOMContentLoaded", () => {
-  const fileInput = document.getElementById("fileInput");
-
-  if (fileInput) {
-    fileInput.addEventListener("change", (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      Papa.parse(file, {
-        header: true,
-        dynamicTyping: false,
-        skipEmptyLines: true,
-        complete: (results) => {
-          dataRaw = results.data || [];
-          dataClean = limpiarDatos(dataRaw);
-          inicializarFiltros(dataClean);
-          renderizarDashboard();
-        },
-      });
-    });
-  }
-
-  // Filtros superiores
-  const filtroIds = [
-    "filtroAnio",
-    "filtroAlmacen",
-    "filtroTipoFactura",
-    "filtroCategoria",
-    "chkExcluirAD",
-  ];
-
-  filtroIds.forEach((id) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.addEventListener("change", () => {
-      const activeViewBtn = document.querySelector(".tab-btn.active");
-      const view = activeViewBtn
-        ? activeViewBtn.getAttribute("data-view")
-        : "resumen";
-      if (view === "resumen") {
-        renderizarDashboard();
-      } else if (view === "comparativo") {
-        renderComparativo();
-      } else if (view === "detalle") {
-        renderDetalle();
-      }
-    });
-  });
-
-  // Buscador general en detalle
-  const searchDetalle = document.getElementById("searchDetalle");
-  if (searchDetalle) {
-    searchDetalle.addEventListener("input", () => {
-      renderDetalle();
-    });
-  }
-
-  // Tabs
-  const tabButtons = document.querySelectorAll(".tab-btn");
-  const views = document.querySelectorAll(".view");
-
-  tabButtons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const view = btn.getAttribute("data-view");
-
-      if (view !== "detalle") {
-        drillMetric = null;
-      }
-
-      tabButtons.forEach((b) => b.classList.remove("active"));
-      views.forEach((v) => v.classList.remove("active"));
-
-      btn.classList.add("active");
-      const viewEl = document.getElementById(`view-${view}`);
-      if (viewEl) viewEl.classList.add("active");
-
-      if (view === "resumen") {
-        renderizarDashboard();
-      } else if (view === "comparativo") {
-        renderComparativo();
-      } else if (view === "detalle") {
-        renderDetalle();
-      }
-    });
-  });
-
-  // Doble clic en comparativo -> detalle en nueva ventana
-  const contComparativo = document.getElementById("tablaComparativoGlobal");
-  if (contComparativo) {
-    contComparativo.addEventListener("dblclick", (e) => {
-      const tr = e.target.closest("tr[data-metric]");
-      if (!tr) return;
-      const metricKey = tr.getAttribute("data-metric");
-      handleComparativoDblClick(metricKey);
-    });
-  }
-
-  // Cerrar dropdowns de chips al hacer clic fuera
-  document.addEventListener("click", (e) => {
-    document.querySelectorAll(".chip-select-dropdown").forEach((dd) => {
-      if (!dd.parentNode.contains(e.target)) {
-        dd.classList.remove("open");
-      }
-    });
-  });
-
-  // Inicializar panel de columnas de Detalle (aunque aún no haya datos)
-  renderDetalleColumnPicker();
-});
-
-/* =========================================================
- *  Limpieza y normalización de datos
- * ======================================================= */
-
-function normalizarFiltro3(valor) {
-  if (!valor) return "";
-  let v = String(valor).trim();
-  if (v === "PROMOCIÃ“N") return "PROMOCIÓN";
-  if (v === "UNIDAD DE CONVERSIÃ“N") return "UNIDAD DE CONVERSIÓN";
-  return v;
+function getColByKey(key) {
+  return ALL_DETALLE_COLS.find((c) => c.key === key) || null;
 }
 
-/**
- * parseFechaCedro
- *  - 2024: dd/mm/yyyy
- *  - 2025: mm/dd/yyyy
- */
+function getActiveDetalleCols() {
+  return detalleSlotKeys
+    .slice(0, MAX_DETALLE_COLS)
+    .map((k) => getColByKey(k))
+    .filter(Boolean);
+}
+
+function normalizarFiltro3(v) {
+  if (!v) return "";
+  let s = String(v).trim();
+  if (s === "PROMOCIÃ“N") return "PROMOCIÓN";
+  if (s === "UNIDAD DE CONVERSIÃ“N") return "UNIDAD DE CONVERSIÓN";
+  return s;
+}
+
 function parseFechaCedro(fechaStr) {
   if (!fechaStr) return null;
   const partes = fechaStr.split(/[/-]/).map((x) => parseInt(x, 10));
-  if (
-    partes.length !== 3 ||
-    isNaN(partes[0]) ||
-    isNaN(partes[1]) ||
-    isNaN(partes[2])
-  ) {
-    return null;
-  }
+  if (partes.length !== 3 || partes.some(isNaN)) return null;
   const [p1, p2, year] = partes;
-
   let day, month;
   if (year === 2024) {
     day = p1;
@@ -347,10 +223,18 @@ function parseFechaCedro(fechaStr) {
     day = p1;
     month = p2;
   }
-
   return new Date(year, month - 1, day);
 }
 
+function parseNumero(valor) {
+  if (valor === null || valor === undefined) return 0;
+  const limpio = String(valor).replace(/\$/g, "").replace(/,/g, "").trim();
+  if (limpio === "") return 0;
+  const num = parseFloat(num = limpio);
+  return isNaN(num) ? 0 : num;
+}
+
+// Fix: correct parseNumero implementation (typo above)
 function parseNumero(valor) {
   if (valor === null || valor === undefined) return 0;
   const limpio = String(valor).replace(/\$/g, "").replace(/,/g, "").trim();
@@ -359,24 +243,49 @@ function parseNumero(valor) {
   return isNaN(num) ? 0 : num;
 }
 
+function formatMoneda(v) {
+  if (!isFinite(v)) return "$0";
+  return "$" + v.toLocaleString("es-MX", { maximumFractionDigits: 0 });
+}
+function formatPorcentaje(v) {
+  if (!isFinite(v)) return "0%";
+  return (v * 100).toFixed(1) + "%";
+}
+
+function escapeHtml(str) {
+  if (str == null) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/* ================== Limpieza =================== */
+
 function limpiarDatos(rows) {
   return rows
     .map((r) => {
       const filtro3Norm = normalizarFiltro3(
-        r["filtro3"] || r["filtro_3"] || r["AD"] || ""
+        r.filtro3 || r["filtro3"] || r["AD"]
       );
-      const fechaObj = parseFechaCedro(r["fecha"]);
+      const fechaObj = parseFechaCedro(r.fecha || r["fecha"]);
       const year = fechaObj ? fechaObj.getFullYear() : null;
       const diaSemana = fechaObj
         ? fechaObj.toLocaleDateString("es-MX", { weekday: "short" })
         : "";
 
-      const subt = parseNumero(r["subt_fac"]);
-      const util = parseNumero(r["utilidad"]);
+      const subt = parseNumero(r.subt_fac || r["subt_fac"]);
+      const util = parseNumero(r.utilidad || r["utilidad"]);
 
-      const tipoFactura = r["Tipo de Factura"] || r["tipo_factura"] || "";
-      const almacen = r["almacen"] || "";
-      const categoria = r["categoria"] || "";
+      const tipoFactura =
+        r["Tipo de Factura"] ||
+        r["tipo_factura"] ||
+        r.tipoFactura ||
+        "";
+      const almacen = r.almacen || r["almacen"] || "";
+      const categoria = r.categoria || r["categoria"] || "";
       const margen_calc = subt !== 0 ? util / subt : 0;
 
       const esAdEspecial = [
@@ -405,38 +314,7 @@ function limpiarDatos(rows) {
     .filter((r) => r.fechaObj && r.year);
 }
 
-/* =========================================================
- *  Filtros superiores
- * ======================================================= */
-
-function inicializarFiltros(data) {
-  poblarFiltroAnio(data);
-  poblarFiltroMultiples(data, "almacen", "filtroAlmacen");
-  poblarFiltroMultiples(data, "categoria", "filtroCategoria");
-
-  const selTipo = document.getElementById("filtroTipoFactura");
-  if (selTipo && selTipo.options.length === 0) {
-    ["todos", "Contado", "Crédito"].forEach((valor) => {
-      const opt = document.createElement("option");
-      opt.value = valor === "todos" ? "todos" : valor;
-      opt.textContent =
-        valor === "todos" ? "Contado + Crédito" : valor;
-      selTipo.appendChild(opt);
-    });
-    selTipo.value = "todos";
-  }
-
-  const chkExcluirAD = document.getElementById("chkExcluirAD");
-  if (chkExcluirAD && chkExcluirAD.checked === false) {
-    chkExcluirAD.checked = true;
-  }
-
-  // chips
-  initChipSingleSelect("filtroAnio", "Todos los años");
-  initChipSingleSelect("filtroTipoFactura", "Contado + Crédito");
-  initChipSingleSelect("filtroAlmacen", "Todos los almacenes");
-  initChipSingleSelect("filtroCategoria", "Todas las categorías");
-}
+/* ================== Filtros superiores =================== */
 
 function poblarFiltroAnio(data) {
   const sel = document.getElementById("filtroAnio");
@@ -484,7 +362,7 @@ function poblarFiltroMultiples(data, campo, idSelect) {
     new Set(
       data
         .map((r) => r[campo])
-        .filter((v) => v !== null && v !== undefined && String(v).trim() !== "")
+        .filter((v) => v != null && String(v).trim() !== "")
     )
   ).sort();
 
@@ -497,8 +375,6 @@ function poblarFiltroMultiples(data, campo, idSelect) {
 
   sel.value = "todos";
 }
-
-/* ---------- Chips helpers ---------- */
 
 function initChipSingleSelect(selectId, placeholderText) {
   const select = document.getElementById(selectId);
@@ -522,20 +398,18 @@ function initChipSingleSelect(selectId, placeholderText) {
     optDiv.textContent = opt.textContent;
     optDiv.dataset.value = opt.value;
 
-    if (opt.selected) {
-      optDiv.classList.add("selected");
-    }
+    if (opt.selected) optDiv.classList.add("selected");
 
     optDiv.addEventListener("click", () => {
       Array.from(select.options).forEach((o) => (o.selected = false));
       opt.selected = true;
 
-      dropdown.querySelectorAll(".chip-option").forEach((d) =>
-        d.classList.remove("selected")
-      );
+      dropdown
+        .querySelectorAll(".chip-option")
+        .forEach((d) => d.classList.remove("selected"));
       optDiv.classList.add("selected");
 
-      syncSingleLabel();
+      syncLabel();
       dropdown.classList.remove("open");
       select.dispatchEvent(new Event("change"));
     });
@@ -543,17 +417,15 @@ function initChipSingleSelect(selectId, placeholderText) {
     dropdown.appendChild(optDiv);
   });
 
-  function syncSingleLabel() {
+  function syncLabel() {
     const labelSpan = display.querySelector(".chip-label");
     const selectedOpt = select.options[select.selectedIndex];
-    if (selectedOpt) {
-      labelSpan.textContent = selectedOpt.textContent;
-    } else {
-      labelSpan.textContent = placeholderText || "Seleccionar";
-    }
+    labelSpan.textContent = selectedOpt
+      ? selectedOpt.textContent
+      : placeholderText || "Seleccionar";
   }
 
-  syncSingleLabel();
+  syncLabel();
 
   display.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -567,22 +439,46 @@ function initChipSingleSelect(selectId, placeholderText) {
   select.dataset.chipified = "1";
 }
 
-/* =========================================================
- *  Helpers filtros generales
- * ======================================================= */
+function inicializarFiltros(data) {
+  poblarFiltroAnio(data);
+  poblarFiltroMultiples(data, "almacen", "filtroAlmacen");
+  poblarFiltroMultiples(data, "categoria", "filtroCategoria");
+
+  const selTipo = document.getElementById("filtroTipoFactura");
+  if (selTipo && selTipo.options.length === 0) {
+    ["todos", "Contado", "Crédito"].forEach((valor) => {
+      const opt = document.createElement("option");
+      opt.value = valor === "todos" ? "todos" : valor;
+      opt.textContent =
+        valor === "todos" ? "Contado + Crédito" : valor;
+      selTipo.appendChild(opt);
+    });
+    selTipo.value = "todos";
+  }
+
+  const chk = document.getElementById("chkExcluirAD");
+  if (chk && !chk.checked) chk.checked = true;
+
+  initChipSingleSelect("filtroAnio", "Todos los años");
+  initChipSingleSelect("filtroTipoFactura", "Contado + Crédito");
+  initChipSingleSelect("filtroAlmacen", "Todos los almacenes");
+  initChipSingleSelect("filtroCategoria", "Todas las categorías");
+
+  renderDetalleFieldPalette();
+}
+
+/* ================== Filtros de datos =================== */
 
 function getValoresMultiples(idSelect) {
   const el = document.getElementById(idSelect);
   if (!el) return [];
-
-  // select simple con opción "todos"
   const v = el.value;
   if (!v || v === "todos") return [];
   return [v];
 }
 
 function getDatosFiltrados() {
-  if (!Array.isArray(dataClean) || dataClean.length === 0) return [];
+  if (!dataClean.length) return [];
 
   const selAnio = document.getElementById("filtroAnio");
   const selTipo = document.getElementById("filtroTipoFactura");
@@ -599,15 +495,22 @@ function getDatosFiltrados() {
     if (excluirAD && r.esAdEspecial) return false;
     if (anio !== "todos" && String(r.year) !== anio) return false;
     if (tipo !== "todos" && r.tipoFactura !== tipo) return false;
-    if (almacenesSel.length > 0 && !almacenesSel.includes(r.almacen)) return false;
-    if (categoriasSel.length > 0 && !categoriasSel.includes(r.categoria)) return false;
+    if (
+      almacenesSel.length > 0 &&
+      !almacenesSel.includes(r.almacen)
+    )
+      return false;
+    if (
+      categoriasSel.length > 0 &&
+      !categoriasSel.includes(r.categoria)
+    )
+      return false;
     return true;
   });
 }
 
-// para comparativo / detalle emergente (sin filtro de año)
 function getDatosFiltradosSinAnio() {
-  if (!Array.isArray(dataClean) || dataClean.length === 0) return [];
+  if (!dataClean.length) return [];
 
   const selTipo = document.getElementById("filtroTipoFactura");
   const chkAD = document.getElementById("chkExcluirAD");
@@ -621,21 +524,27 @@ function getDatosFiltradosSinAnio() {
   return dataClean.filter((r) => {
     if (excluirAD && r.esAdEspecial) return false;
     if (tipo !== "todos" && r.tipoFactura !== tipo) return false;
-    if (almacenesSel.length > 0 && !almacenesSel.includes(r.almacen)) return false;
-    if (categoriasSel.length > 0 && !categoriasSel.includes(r.categoria)) return false;
+    if (
+      almacenesSel.length > 0 &&
+      !almacenesSel.includes(r.almacen)
+    )
+      return false;
+    if (
+      categoriasSel.length > 0 &&
+      !categoriasSel.includes(r.categoria)
+    )
+      return false;
     return true;
   });
 }
 
-/* =========================================================
- *  KPIs y agrupación
- * ======================================================= */
+/* ================== KPIs / agrupaciones =================== */
 
 function calcularKpis(rows) {
-  let ventas = 0;
-  let utilidad = 0;
-  let ventasCredito = 0;
-  let ventasNegativas = 0;
+  let ventas = 0,
+    utilidad = 0,
+    ventasCredito = 0,
+    ventasNeg = 0;
 
   rows.forEach((r) => {
     const v = r.subt_fac_num || 0;
@@ -643,112 +552,78 @@ function calcularKpis(rows) {
     ventas += v;
     utilidad += u;
     if (r.tipoFactura === "Crédito") ventasCredito += v;
-    if (u < 0) ventasNegativas += v;
+    if (u < 0) ventasNeg += v;
   });
 
-  const margen = ventas > 0 ? utilidad / ventas : 0;
-  const pctCredito = ventas > 0 ? ventasCredito / ventas : 0;
-  const pctNegativas = ventas > 0 ? ventasNegativas / ventas : 0;
-
-  return { ventas, utilidad, margen, pctCredito, pctNegativas };
+  return {
+    ventas,
+    utilidad,
+    margen: ventas > 0 ? utilidad / ventas : 0,
+    pctCredito: ventas > 0 ? ventasCredito / ventas : 0,
+    pctNegativas: ventas > 0 ? ventasNeg / ventas : 0,
+  };
 }
 
 function agruparPorSucursal(rows) {
   const mapa = {};
   rows.forEach((r) => {
     const alm = r.almacen || "SIN_ALMACEN";
-    if (!mapa[alm]) {
-      mapa[alm] = {
-        almacen: alm,
-        ventas: 0,
-        utilidad: 0,
-        ventasNegativas: 0,
-      };
-    }
+    if (!mapa[alm])
+      mapa[alm] = { almacen: alm, ventas: 0, utilidad: 0, ventasNeg: 0 };
     mapa[alm].ventas += r.subt_fac_num || 0;
     mapa[alm].utilidad += r.utilidad_num || 0;
-    if (r.utilidad_num < 0) {
-      mapa[alm].ventasNegativas += r.subt_fac_num || 0;
-    }
+    if (r.utilidad_num < 0) mapa[alm].ventasNeg += r.subt_fac_num || 0;
   });
 
   const lista = Object.values(mapa);
   lista.forEach((s) => {
     s.margen = s.ventas > 0 ? s.utilidad / s.ventas : 0;
-    s.pctNegativas = s.ventas > 0 ? s.ventasNegativas / s.ventas : 0;
+    s.pctNeg = s.ventas > 0 ? s.ventasNeg / s.ventas : 0;
   });
 
   lista.sort((a, b) => b.ventas - a.ventas);
   return lista;
 }
 
-function formatMoneda(valor) {
-  if (!isFinite(valor)) return "$0";
-  return "$" + valor.toLocaleString("es-MX", { maximumFractionDigits: 0 });
-}
-
-function formatPorcentaje(valor) {
-  if (!isFinite(valor)) return "0%";
-  return (valor * 100).toFixed(1) + "%";
-}
-
-/* =========================================================
- *  Vista Resumen
- * ======================================================= */
+/* ================== Resumen =================== */
 
 function actualizarKpiCards(kpi) {
-  const kpiVentas = document.getElementById("kpiVentas");
-  const kpiUtilidad = document.getElementById("kpiUtilidad");
-  const kpiMargen = document.getElementById("kpiMargen");
-  const kpiCredito = document.getElementById("kpiCredito");
-  const kpiNegativas = document.getElementById("kpiNegativas");
+  const v = document.getElementById("kpiVentas");
+  const u = document.getElementById("kpiUtilidad");
+  const m = document.getElementById("kpiMargen");
+  const c = document.getElementById("kpiCredito");
+  const n = document.getElementById("kpiNegativas");
 
-  if (kpiVentas) {
-    kpiVentas.innerHTML = `
-      <h3>Ventas IMC</h3>
-      <p>${formatMoneda(kpi.ventas)}</p>
-    `;
-  }
-
-  if (kpiUtilidad) {
-    kpiUtilidad.innerHTML = `
-      <h3>Utilidad Bruta</h3>
-      <p>${formatMoneda(kpi.utilidad)}</p>
-    `;
-  }
-
-  if (kpiMargen) {
-    kpiMargen.innerHTML = `
-      <h3>Margen Bruto</h3>
-      <p>${formatPorcentaje(kpi.margen)}</p>
-    `;
-  }
-
-  if (kpiCredito) {
-    kpiCredito.innerHTML = `
-      <h3>% Ventas a Crédito</h3>
-      <p>${formatPorcentaje(kpi.pctCredito)}</p>
-    `;
-  }
-
-  if (kpiNegativas) {
-    kpiNegativas.innerHTML = `
-      <h3>% Ventas con Utilidad Negativa</h3>
-      <p>${formatPorcentaje(kpi.pctNegativas)}</p>
-    `;
-  }
+  if (v)
+    v.innerHTML = `<h3>Ventas IMC</h3><p>${formatMoneda(
+      kpi.ventas
+    )}</p>`;
+  if (u)
+    u.innerHTML = `<h3>Utilidad Bruta</h3><p>${formatMoneda(
+      kpi.utilidad
+    )}</p>`;
+  if (m)
+    m.innerHTML = `<h3>Margen Bruto</h3><p>${formatPorcentaje(
+      kpi.margen
+    )}</p>`;
+  if (c)
+    c.innerHTML = `<h3>% Ventas a Crédito</h3><p>${formatPorcentaje(
+      kpi.pctCredito
+    )}</p>`;
+  if (n)
+    n.innerHTML = `<h3>% Ventas con Utilidad Negativa</h3><p>${formatPorcentaje(
+      kpi.pctNegativas
+    )}</p>`;
 }
 
 function renderTablaSucursales(rows) {
-  const contenedor = document.getElementById("tablaSucursales");
-  if (!contenedor) return;
-  if (!rows || rows.length === 0) {
-    contenedor.innerHTML = "<p>Sin datos para los filtros seleccionados.</p>";
+  const cont = document.getElementById("tablaSucursales");
+  if (!cont) return;
+  if (!rows.length) {
+    cont.innerHTML = "<p>Sin datos para los filtros seleccionados.</p>";
     return;
   }
-
-  const sucursales = agruparPorSucursal(rows);
-
+  const suc = agruparPorSucursal(rows);
   let html = `
     <table class="tabla-sucursales">
       <thead>
@@ -760,36 +635,27 @@ function renderTablaSucursales(rows) {
           <th>% Ventas con Utilidad Negativa</th>
         </tr>
       </thead>
-      <tbody>
-  `;
-
-  sucursales.forEach((s) => {
+      <tbody>`;
+  suc.forEach((s) => {
     html += `
       <tr>
         <td>${s.almacen}</td>
         <td>${formatMoneda(s.ventas)}</td>
         <td>${formatMoneda(s.utilidad)}</td>
         <td>${formatPorcentaje(s.margen)}</td>
-        <td>${formatPorcentaje(s.pctNegativas)}</td>
-      </tr>
-    `;
+        <td>${formatPorcentaje(s.pctNeg)}</td>
+      </tr>`;
   });
-
   html += "</tbody></table>";
-  contenedor.innerHTML = html;
+  cont.innerHTML = html;
 }
 
-/* =========================================================
- *  Gráficos Resumen (orden descendente)
- * ======================================================= */
+/* ====== Gráficos resumen (orden descendente) ====== */
 
-function destruirChart(chartRef) {
-  if (chartRef && typeof chartRef.destroy === "function") {
-    chartRef.destroy();
-  }
+function destruirChart(ch) {
+  if (ch && typeof ch.destroy === "function") ch.destroy();
 }
 
-// Categorías descendente por ventas
 function renderGraficoCategorias(rows) {
   const ctx = document.getElementById("graficoCategorias");
   if (!ctx) return;
@@ -797,30 +663,20 @@ function renderGraficoCategorias(rows) {
   const mapa = {};
   rows.forEach((r) => {
     const cat = r.categoria || "SIN CATEGORIA";
-    if (!mapa[cat]) mapa[cat] = 0;
-    mapa[cat] += r.subt_fac_num || 0;
+    mapa[cat] = (mapa[cat] || 0) + (r.subt_fac_num || 0);
   });
 
-  let entries = Object.entries(mapa).map(([cat, total]) => ({
-    cat,
-    total,
-  }));
-  entries.sort((a, b) => b.total - a.total);
-
-  const labels = entries.map((e) => e.cat);
-  const valores = entries.map((e) => e.total);
+  const arr = Object.entries(mapa)
+    .map(([cat, total]) => ({ cat, total }))
+    .sort((a, b) => b.total - a.total);
 
   destruirChart(charts.categorias);
-
   charts.categorias = new Chart(ctx, {
     type: "bar",
     data: {
-      labels,
+      labels: arr.map((x) => x.cat),
       datasets: [
-        {
-          label: "Ventas por categoría",
-          data: valores,
-        },
+        { label: "Ventas por categoría", data: arr.map((x) => x.total) },
       ],
     },
     options: {
@@ -829,10 +685,7 @@ function renderGraficoCategorias(rows) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: (context) => {
-              const v = context.parsed.y || 0;
-              return " " + formatMoneda(v);
-            },
+            label: (c) => " " + formatMoneda(c.parsed.y || 0),
           },
         },
       },
@@ -847,26 +700,18 @@ function renderGraficoCategorias(rows) {
   });
 }
 
-// Sucursales ya vienen ordenadas por ventas desc
 function renderGraficoSucursales(rows) {
   const ctx = document.getElementById("graficoSucursales");
   if (!ctx) return;
 
-  const sucursales = agruparPorSucursal(rows);
-  const labels = sucursales.map((s) => s.almacen);
-  const valores = sucursales.map((s) => s.ventas);
-
+  const suc = agruparPorSucursal(rows);
   destruirChart(charts.sucursales);
-
   charts.sucursales = new Chart(ctx, {
     type: "bar",
     data: {
-      labels,
+      labels: suc.map((s) => s.almacen),
       datasets: [
-        {
-          label: "Ventas por sucursal",
-          data: valores,
-        },
+        { label: "Ventas por sucursal", data: suc.map((s) => s.ventas) },
       ],
     },
     options: {
@@ -875,7 +720,7 @@ function renderGraficoSucursales(rows) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: (context) => " " + formatMoneda(context.parsed.y || 0),
+            label: (c) => " " + formatMoneda(c.parsed.y || 0),
           },
         },
       },
@@ -890,38 +735,28 @@ function renderGraficoSucursales(rows) {
   });
 }
 
-// Días de semana descendente por ventas
 function renderGraficoDiaSemana(rows) {
   const ctx = document.getElementById("graficoDiaSemana");
   if (!ctx) return;
 
   const mapa = {};
   rows.forEach((r) => {
-    const d = (r.diaSemana || "").toLowerCase().slice(0, 3) || "n/a";
-    if (!mapa[d]) mapa[d] = 0;
-    mapa[d] += r.subt_fac_num || 0;
+    const d =
+      (r.diaSemana || "").toLowerCase().slice(0, 3) || "n/a";
+    mapa[d] = (mapa[d] || 0) + (r.subt_fac_num || 0);
   });
 
-  let entries = Object.entries(mapa).map(([dia, total]) => ({
-    dia,
-    total,
-  }));
-  entries.sort((a, b) => b.total - a.total);
-
-  const labels = entries.map((e) => e.dia);
-  const valores = entries.map((e) => e.total);
+  const arr = Object.entries(mapa)
+    .map(([dia, total]) => ({ dia, total }))
+    .sort((a, b) => b.total - a.total);
 
   destruirChart(charts.diaSemana);
-
   charts.diaSemana = new Chart(ctx, {
     type: "bar",
     data: {
-      labels,
+      labels: arr.map((x) => x.dia),
       datasets: [
-        {
-          label: "Ventas por día de la semana",
-          data: valores,
-        },
+        { label: "Ventas por día", data: arr.map((x) => x.total) },
       ],
     },
     options: {
@@ -930,7 +765,7 @@ function renderGraficoDiaSemana(rows) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: (context) => " " + formatMoneda(context.parsed.y || 0),
+            label: (c) => " " + formatMoneda(c.parsed.y || 0),
           },
         },
       },
@@ -945,52 +780,48 @@ function renderGraficoDiaSemana(rows) {
   });
 }
 
-/* =========================================================
- *  Comparativo YoY + ventana emergente detalle métrica
- * ======================================================= */
+/* ================== Comparativo YoY =================== */
 
-function buildDeltaHtml(valorAnterior, valorActual) {
-  if (!isFinite(valorAnterior) || valorAnterior === 0) {
+function buildDeltaHtml(prev, act) {
+  if (!isFinite(prev) || prev === 0)
     return `<span class="delta delta-flat">⏺ n/d</span>`;
+  const d = (act - prev) / prev;
+  let cls = "delta-flat",
+    icon = "⏺";
+  if (d > 0.001) {
+    cls = "delta-up";
+    icon = "▲";
+  } else if (d < -0.001) {
+    cls = "delta-down";
+    icon = "▼";
   }
-  const deltaPct = (valorActual - valorAnterior) / valorAnterior;
-  let clase = "delta-flat";
-  let icono = "⏺";
-  if (deltaPct > 0.001) {
-    clase = "delta-up";
-    icono = "▲";
-  } else if (deltaPct < -0.001) {
-    clase = "delta-down";
-    icono = "▼";
-  }
-  return `<span class="delta ${clase}">${icono} ${(deltaPct * 100).toFixed(
+  return `<span class="delta ${cls}">${icon} ${(d * 100).toFixed(
     1
   )}%</span>`;
 }
 
 function renderComparativo() {
-  const contTabla = document.getElementById("tablaComparativoGlobal");
+  const cont = document.getElementById("tablaComparativoGlobal");
   const ctxSuc = document.getElementById("graficoComparativoSucursales");
   const ctxCat = document.getElementById("graficoComparativoCategorias");
-
-  if (!contTabla || !ctxSuc || !ctxCat) return;
+  if (!cont || !ctxSuc || !ctxCat) return;
 
   const base = getDatosFiltradosSinAnio();
   if (!base.length) {
-    contTabla.innerHTML =
-      "<p>Sin datos para comparar 2024 vs 2025 con los filtros seleccionados.</p>";
+    cont.innerHTML = "<p>Sin datos para comparar 2024 vs 2025.</p>";
     destruirChart(charts.compSucursales);
     destruirChart(charts.compCategorias);
     return;
   }
 
-  const rows2024 = base.filter((r) => r.year === 2024);
-  const rows2025 = base.filter((r) => r.year === 2025);
+  const r24 = base.filter((r) => r.year === 2024);
+  const r25 = base.filter((r) => r.year === 2025);
 
-  const k24 = calcularKpis(rows2024);
-  const k25 = calcularKpis(rows2025);
+  const k24 = calcularKpis(r24);
+  const k25 = calcularKpis(r25);
 
-  let html = `
+  // ====== TABLA COMPARATIVA GLOBAL ======
+  cont.innerHTML = `
     <table class="tabla-comparativo">
       <thead>
         <tr>
@@ -1034,35 +865,28 @@ function renderComparativo() {
       </tbody>
     </table>
   `;
-  contTabla.innerHTML = html;
 
-  // Gráfico comparativo por sucursal ordenado por ventas 2025 desc
+  // ====== GRÁFICO SUCURSALES (igual que antes) ======
   const mapaSuc = {};
   base.forEach((r) => {
-    const alm = r.almacen || "SIN_ALMACEN";
-    if (!mapaSuc[alm]) mapaSuc[alm] = { v24: 0, v25: 0 };
-    if (r.year === 2024) mapaSuc[alm].v24 += r.subt_fac_num || 0;
-    if (r.year === 2025) mapaSuc[alm].v25 += r.subt_fac_num || 0;
+    const a = r.almacen || "SIN_ALMACEN";
+    if (!mapaSuc[a]) mapaSuc[a] = { v24: 0, v25: 0 };
+    if (r.year === 2024) mapaSuc[a].v24 += r.subt_fac_num || 0;
+    if (r.year === 2025) mapaSuc[a].v25 += r.subt_fac_num || 0;
   });
 
-  let arrSuc = Object.entries(mapaSuc).map(([alm, vals]) => ({
-    alm,
-    ...vals,
-  }));
-  arrSuc.sort((a, b) => b.v25 - a.v25);
-
-  const labelsSuc = arrSuc.map((x) => x.alm);
-  const data24Suc = arrSuc.map((x) => x.v24);
-  const data25Suc = arrSuc.map((x) => x.v25);
+  const arrSuc = Object.entries(mapaSuc)
+    .map(([alm, vals]) => ({ alm, ...vals }))
+    .sort((a, b) => b.v25 - a.v25);
 
   destruirChart(charts.compSucursales);
   charts.compSucursales = new Chart(ctxSuc, {
     type: "bar",
     data: {
-      labels: labelsSuc,
+      labels: arrSuc.map((x) => x.alm),
       datasets: [
-        { label: "2024", data: data24Suc },
-        { label: "2025", data: data25Suc },
+        { label: "2024", data: arrSuc.map((x) => x.v24) },
+        { label: "2025", data: arrSuc.map((x) => x.v25) },
       ],
     },
     options: {
@@ -1070,49 +894,109 @@ function renderComparativo() {
       plugins: {
         tooltip: {
           callbacks: {
-            label: (ctx) => `${ctx.dataset.label}: ${formatMoneda(ctx.parsed.y)}`,
+            label: (c) =>
+              `${c.dataset.label}: ${formatMoneda(c.parsed.y || 0)}`,
           },
         },
       },
       scales: {
         y: {
           ticks: {
-            callback: (val) => formatMoneda(val),
+            callback: (v) => formatMoneda(v),
           },
         },
       },
     },
   });
 
-  // Gráfico comparativo por categoría (top 10 por 2025)
+  // ====== GRÁFICO CATEGORÍAS: MAYOR Y MENOR CRECIMIENTO + DELTA MARGEN ======
   const mapaCat = {};
   base.forEach((r) => {
-    const cat = r.categoria || "SIN CATEGORIA";
-    if (!mapaCat[cat]) mapaCat[cat] = { v24: 0, v25: 0 };
-    if (r.year === 2024) mapaCat[cat].v24 += r.subt_fac_num || 0;
-    if (r.year === 2025) mapaCat[cat].v25 += r.subt_fac_num || 0;
+    const c = r.categoria || "SIN CATEGORIA";
+    if (!mapaCat[c]) {
+      mapaCat[c] = {
+        cat: c,
+        v24: 0,
+        v25: 0,
+        subt24: 0,
+        subt25: 0,
+        util24: 0,
+        util25: 0,
+      };
+    }
+    if (r.year === 2024) {
+      mapaCat[c].v24 += r.subt_fac_num || 0;
+      mapaCat[c].subt24 += r.subt_fac_num || 0;
+      mapaCat[c].util24 += r.utilidad_num || 0;
+    } else if (r.year === 2025) {
+      mapaCat[c].v25 += r.subt_fac_num || 0;
+      mapaCat[c].subt25 += r.subt_fac_num || 0;
+      mapaCat[c].util25 += r.utilidad_num || 0;
+    }
   });
 
-  let arrCat = Object.entries(mapaCat).map(([cat, vals]) => ({
-    cat,
-    ...vals,
-  }));
+  let arrCat = Object.values(mapaCat).map((g) => {
+    const margen24 = g.subt24 > 0 ? g.util24 / g.subt24 : 0;
+    const margen25 = g.subt25 > 0 ? g.util25 / g.subt25 : 0;
+    let deltaVentas = null;
+    if (g.v24 > 0) {
+      deltaVentas = (g.v25 - g.v24) / g.v24; // crecimiento %
+    }
+    const deltaMargen = margen25 - margen24; // diferencia de margen (2025 - 2024)
+    return {
+      ...g,
+      margen24,
+      margen25,
+      deltaVentas,
+      deltaMargen,
+    };
+  });
 
-  arrCat.sort((a, b) => b.v25 - a.v25);
-  arrCat = arrCat.slice(0, 10);
+  const valid = arrCat.filter(
+    (c) => c.deltaVentas !== null && (c.v24 > 0 || c.v25 > 0)
+  );
 
-  const labelsCat = arrCat.map((x) => x.cat);
-  const data24Cat = arrCat.map((x) => x.v24);
-  const data25Cat = arrCat.map((x) => x.v25);
+  if (!valid.length) {
+    destruirChart(charts.compCategorias);
+    return;
+  }
+
+  const N = 5;
+
+  const topUp = [...valid]
+    .sort((a, b) => b.deltaVentas - a.deltaVentas)
+    .slice(0, N);
+
+  const topDown = [...valid]
+    .sort((a, b) => a.deltaVentas - b.deltaVentas)
+    .slice(0, N);
+
+  const seleccion = [];
+  const vistos = new Set();
+  [...topUp, ...topDown].forEach((c) => {
+    if (!vistos.has(c.cat)) {
+      vistos.add(c.cat);
+      seleccion.push(c);
+    }
+  });
+
+  seleccion.sort((a, b) => b.deltaVentas - a.deltaVentas);
+
+  const labels = seleccion.map((c) => c.cat);
+  const data24 = seleccion.map((c) => c.v24);
+  const data25 = seleccion.map((c) => c.v25);
+  const margen24Arr = seleccion.map((c) => c.margen24);
+  const margen25Arr = seleccion.map((c) => c.margen25);
+  const deltaMargenArr = seleccion.map((c) => c.deltaMargen);
 
   destruirChart(charts.compCategorias);
   charts.compCategorias = new Chart(ctxCat, {
     type: "bar",
     data: {
-      labels: labelsCat,
+      labels,
       datasets: [
-        { label: "2024", data: data24Cat },
-        { label: "2025", data: data25Cat },
+        { label: "2024", data: data24 },
+        { label: "2025", data: data25 },
       ],
     },
     options: {
@@ -1120,14 +1004,39 @@ function renderComparativo() {
       plugins: {
         tooltip: {
           callbacks: {
-            label: (ctx) => `${ctx.dataset.label}: ${formatMoneda(ctx.parsed.y)}`,
+            label: function (ctx) {
+              const idx = ctx.dataIndex;
+              const is2024 = ctx.dataset.label === "2024";
+              const venta = ctx.parsed.y || 0;
+
+              const m24 = margen24Arr[idx] || 0;
+              const m25 = margen25Arr[idx] || 0;
+              const dM = deltaMargenArr[idx] || 0;
+
+              let icon = "⏺";
+              if (dM > 0.0001) icon = "▲";
+              else if (dM < -0.0001) icon = "▼";
+
+              const margenTexto = is2024
+                ? `Margen 2024: ${(m24 * 100).toFixed(1)}%`
+                : `Margen 2025: ${(m25 * 100).toFixed(1)}%`;
+
+              const deltaMargenTexto = `Cambio margen: ${icon} ${(dM * 100).toFixed(1)} pp`;
+
+              return [
+                `${ctx.dataset.label}: ${formatMoneda(venta)}`,
+                margenTexto,
+                deltaMargenTexto,
+              ];
+            },
           },
         },
+        legend: {},
       },
       scales: {
         y: {
           ticks: {
-            callback: (val) => formatMoneda(val),
+            callback: (v) => formatMoneda(v),
           },
         },
       },
@@ -1135,17 +1044,8 @@ function renderComparativo() {
   });
 }
 
-function escapeHtml(str) {
-  if (str === null || str === undefined) return "";
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+/* ====== Ventana emergente al doble clic – Vista por categoría + drill a artículos ====== */
 
-// ventana nueva con detalle por métrica
 function handleComparativoDblClick(metricKey) {
   if (!metricKey) return;
 
@@ -1160,158 +1060,526 @@ function handleComparativoDblClick(metricKey) {
 
   switch (metricKey) {
     case "ventas":
-      titulo = "Detalle – Ventas (Subtotal)";
+      titulo = "Detalle por categoría – Ventas (Subtotal)";
       break;
     case "utilidad":
-      titulo = "Detalle – Utilidad Bruta";
+      titulo = "Detalle por categoría – Utilidad Bruta";
       break;
     case "margen":
-      titulo = "Detalle – Margen Bruto";
+      titulo = "Detalle por categoría – Margen Bruto";
       break;
     case "credito":
-      titulo = "Detalle – Ventas a Crédito";
+      titulo = "Detalle por categoría – Ventas a Crédito";
       rows = rows.filter((r) => r.tipoFactura === "Crédito");
       break;
     case "negativas":
-      titulo = "Detalle – Ventas con Utilidad Negativa";
+      titulo = "Detalle por categoría – Ventas con Utilidad Negativa";
       rows = rows.filter((r) => (r.utilidad_num || 0) < 0);
       break;
     default:
-      titulo = "Detalle de métricas";
+      titulo = "Detalle por categoría";
   }
 
   if (!rows.length) {
-    alert("No hay filas que cumplan con esta métrica y filtros.");
+    alert("No hay filas para esa métrica con los filtros actuales.");
     return;
   }
 
-  const maxRows = 2000;
-  const slice = rows.slice(0, maxRows);
+  // comparativa 2024 vs 2025
+  rows = rows.filter((r) => r.year === 2024 || r.year === 2025);
+  if (!rows.length) {
+    alert("No hay datos de 2024 ni 2025 para la métrica y filtros seleccionados.");
+    return;
+  }
 
-  let filasHTML = "";
-  slice.forEach((r) => {
+  // Agrupar por (year, almacen, categoria)
+  const mapa = {};
+  rows.forEach((r) => {
     const year = r.year || "";
-    const alm = escapeHtml(r.almacen || "");
-    const articulo = escapeHtml(r["producto"] || r["clave"] || "");
-    const costoNum = parseNumero(r["costo1"] || r["costo2"] || 0);
+    const almacen = r.almacen || "";
+    const categoria = r.categoria || "SIN CATEGORIA";
 
-    let descNum = 0;
-    ["descuento", "descuento1", "descuento_1", "descuento2", "descuento_2"].forEach(
-      (campo) => {
-        if (r.hasOwnProperty(campo)) {
-          descNum += parseNumero(r[campo]);
-        }
-      }
+    const costoRenglon = parseNumero(
+      r.costo1 || r["costo1"] || r.costo2 || r["costo2"] || 0
     );
 
-    const subtotalNum = r.subt_fac_num || 0;
-    const utilidadNum = r.utilidad_num || 0;
-    const margenVal = r.margen_calc || 0;
-
-    filasHTML += `
-      <tr>
-        <td>${year}</td>
-        <td>${alm}</td>
-        <td>${articulo}</td>
-        <td style="text-align:right;">${formatMoneda(costoNum)}</td>
-        <td style="text-align:right;">${formatMoneda(subtotalNum)}</td>
-        <td style="text-align:right;">${formatMoneda(descNum)}</td>
-        <td style="text-align:right;">${formatMoneda(utilidadNum)}</td>
-        <td style="text-align:right;">${formatPorcentaje(margenVal)}</td>
-      </tr>
-    `;
+    const key = `${year}||${almacen}||${categoria}`;
+    if (!mapa[key]) {
+      mapa[key] = {
+        year,
+        almacen,
+        categoria,
+        costo: 0,
+        subtotal: 0,
+        utilidad: 0,
+      };
+    }
+    mapa[key].costo += costoRenglon;
+    mapa[key].subtotal += r.subt_fac_num || 0;
+    mapa[key].utilidad += r.utilidad_num || 0;
   });
 
-  const notaExtra =
-    rows.length > maxRows
-      ? `<p style="font-size:11px;color:#9ca3af;margin-top:4px;">
-           Mostrando ${maxRows} de ${rows.length} filas (se recortó para mejorar rendimiento).
-         </p>`
+  const grupos = Object.values(mapa).map((g) => ({
+    ...g,
+    margen: g.subtotal > 0 ? g.utilidad / g.subtotal : 0,
+  }));
+
+  if (!grupos.length) {
+    alert("No hay datos para agrupar por categoría.");
+    return;
+  }
+
+  const maxRows = 5000;
+  const slice = grupos.slice(0, maxRows);
+
+  let filasHTML = "";
+  slice.forEach((g) => {
+    filasHTML += `
+      <tr
+        data-year="${g.year}"
+        data-almacen="${escapeHtml(g.almacen)}"
+        data-categoria="${escapeHtml(g.categoria)}"
+      >
+        <td>${g.year || ""}</td>
+        <td>${escapeHtml(g.almacen || "")}</td>
+        <td>${escapeHtml(g.categoria || "")}</td>
+        <td class="num" data-num="${g.costo}">${formatMoneda(g.costo)}</td>
+        <td class="num" data-num="${g.subtotal}">${formatMoneda(g.subtotal)}</td>
+        <td class="num" data-num="${g.margen}">${formatPorcentaje(g.margen)}</td>
+        <td class="num" data-num="${g.utilidad}">${formatMoneda(g.utilidad)}</td>
+      </tr>`;
+  });
+
+  const nota =
+    grupos.length > maxRows
+      ? `<p style="font-size:11px;color:#9ca3af;">Mostrando ${maxRows} de ${grupos.length} categorías.</p>`
       : "";
 
   const win = window.open("", "_blank");
   if (!win) {
-    alert("El navegador bloqueó la ventana emergente. Permite pop-ups para ver el detalle.");
+    alert("El navegador bloqueó la ventana emergente.");
     return;
   }
 
-  const html = `
+  win.document.write(`
     <!DOCTYPE html>
     <html lang="es">
     <head>
       <meta charset="UTF-8" />
       <title>${escapeHtml(titulo)}</title>
       <style>
-        body {
-          font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-          background: #020617;
-          color: #e5e7eb;
-          margin: 0;
-          padding: 12px 16px;
+        body{
+          font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+          background:#020617;color:#e5e7eb;margin:0;padding:12px 16px;
         }
-        h1 {
-          font-size: 18px;
-          margin: 0 0 4px 0;
+        h1{font-size:18px;margin:0 0 4px 0;}
+        p{margin:0 0 8px 0;font-size:12px;color:#9ca3af;}
+        table{width:100%;border-collapse:collapse;font-size:12px;}
+        th,td{border:1px solid #1f2937;padding:4px 6px;}
+        th{background:#020617;text-align:left;vertical-align:top;}
+        th.num,td.num{text-align:right;}
+        thead{position:sticky;top:0;}
+        .filter-input{
+          width:100%;
+          box-sizing:border-box;
+          font-size:11px;
+          padding:2px 3px;
+          border-radius:4px;
+          border:1px solid #1f2937;
+          background:#020617;
+          color:#e5e7eb;
         }
-        p {
-          margin: 0 0 8px 0;
-          font-size: 12px;
-          color: #9ca3af;
+        .sort-btn{
+          border:none;
+          background:transparent;
+          color:#9ca3af;
+          font-size:10px;
+          cursor:pointer;
+          margin-left:4px;
         }
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: 12px;
-        }
-        th, td {
-          border: 1px solid #1f2937;
-          padding: 4px 6px;
-        }
-        th {
-          background: #020617;
-          text-align: left;
-        }
-        th.num, td.num {
-          text-align: right;
-        }
-        thead {
-          position: sticky;
-          top: 0;
+        .sort-btn.active{color:#e5e7eb;}
+        tbody tr:hover{
+          background:#111827;
+          cursor:pointer;
         }
       </style>
     </head>
     <body>
       <h1>${escapeHtml(titulo)}</h1>
-      <p>Detalle generado con los filtros actuales del dashboard (sin filtro de año para comparar 2024 vs 2025).</p>
-      <table>
+      <p>
+        Comparativa año contra año (2024 vs 2025) por categoría y almacén,
+        respetando los filtros superiores (almacén, tipo de factura, categoría y AD).
+        Doble clic en una categoría para ver el desglose por artículos.
+      </p>
+      <table id="catTable">
         <thead>
           <tr>
-            <th>Año</th>
-            <th>Almacén</th>
-            <th>Artículo</th>
-            <th class="num">Costo</th>
-            <th class="num">Subtotal factura</th>
-            <th class="num">Descuento</th>
-            <th class="num">Utilidad</th>
-            <th class="num">Margen</th>
+            <th data-col="0">Año <button class="sort-btn" data-col="0">⇅</button></th>
+            <th data-col="1">Almacén <button class="sort-btn" data-col="1">⇅</button></th>
+            <th data-col="2">Categoría <button class="sort-btn" data-col="2">⇅</button></th>
+            <th data-col="3" class="num">Costo <button class="sort-btn" data-col="3">⇅</button></th>
+            <th data-col="4" class="num">Subtotal factura <button class="sort-btn" data-col="4">⇅</button></th>
+            <th data-col="5" class="num">Margen <button class="sort-btn" data-col="5">⇅</button></th>
+            <th data-col="6" class="num">Utilidad <button class="sort-btn" data-col="6">⇅</button></th>
+          </tr>
+          <tr>
+            <th><input class="filter-input" data-col="0" placeholder="Filtrar..." /></th>
+            <th><input class="filter-input" data-col="1" placeholder="Filtrar..." /></th>
+            <th><input class="filter-input" data-col="2" placeholder="Filtrar..." /></th>
+            <th><input class="filter-input" data-col="3" placeholder="Filtrar..." /></th>
+            <th><input class="filter-input" data-col="4" placeholder="Filtrar..." /></th>
+            <th><input class="filter-input" data-col="5" placeholder="Filtrar..." /></th>
+            <th><input class="filter-input" data-col="6" placeholder="Filtrar..." /></th>
           </tr>
         </thead>
         <tbody>
           ${filasHTML}
         </tbody>
       </table>
-      ${notaExtra}
+      ${nota}
+
+      <script>
+        (function(){
+          var table = document.getElementById("catTable");
+          var tbody = table.querySelector("tbody");
+          var originalRows = Array.prototype.slice.call(tbody.querySelectorAll("tr"));
+          var numericCols = {3:true,4:true,5:true,6:true};
+          var sortCol = null;
+          var sortDir = "asc";
+
+          function applyFiltersAndSort() {
+            var filters = Array.prototype.slice.call(document.querySelectorAll(".filter-input"));
+            var rows = originalRows.slice();
+
+            rows = rows.filter(function(row){
+              return filters.every(function(input){
+                var val = (input.value || "").trim().toLowerCase();
+                if (!val) return true;
+                var colIndex = parseInt(input.getAttribute("data-col"),10);
+                var cell = row.children[colIndex];
+                if (!cell) return true;
+                return cell.textContent.toLowerCase().indexOf(val) !== -1;
+              });
+            });
+
+            if (sortCol !== null) {
+              var factor = sortDir === "asc" ? 1 : -1;
+              rows.sort(function(a,b){
+                var ca = a.children[sortCol];
+                var cb = b.children[sortCol];
+                if (!ca || !cb) return 0;
+
+                if (numericCols[sortCol]) {
+                  var va = parseFloat(ca.getAttribute("data-num") || "0");
+                  var vb = parseFloat(cb.getAttribute("data-num") || "0");
+                  if (va < vb) return -1 * factor;
+                  if (va > vb) return 1 * factor;
+                  return 0;
+                } else {
+                  var va = ca.textContent.toLowerCase();
+                  var vb = cb.textContent.toLowerCase();
+                  if (va < vb) return -1 * factor;
+                  if (va > vb) return 1 * factor;
+                  return 0;
+                }
+              });
+            }
+
+            tbody.innerHTML = "";
+            rows.forEach(function(r){ tbody.appendChild(r); });
+          }
+
+          Array.prototype.slice.call(document.querySelectorAll(".filter-input"))
+            .forEach(function(inp){
+              inp.addEventListener("input", applyFiltersAndSort);
+            });
+
+          Array.prototype.slice.call(document.querySelectorAll(".sort-btn"))
+            .forEach(function(btn){
+              btn.addEventListener("click", function(){
+                var col = parseInt(btn.getAttribute("data-col"),10);
+                if (sortCol === col) {
+                  sortDir = (sortDir === "asc" ? "desc" : "asc");
+                } else {
+                  sortCol = col;
+                  sortDir = "asc";
+                }
+
+                Array.prototype.slice.call(document.querySelectorAll(".sort-btn"))
+                  .forEach(function(b){ b.textContent = "⇅"; b.classList.remove("active"); });
+
+                btn.textContent = (sortDir === "asc" ? "▲" : "▼");
+                btn.classList.add("active");
+
+                applyFiltersAndSort();
+              });
+            });
+
+          tbody.addEventListener("dblclick", function(e){
+            var tr = e.target.closest("tr");
+            if (!tr) return;
+            var year = tr.getAttribute("data-year") || "";
+            var almacen = tr.getAttribute("data-almacen") || "";
+            var categoria = tr.getAttribute("data-categoria") || "";
+            if (window.opener && typeof window.opener.handleCategoriaDrill === "function") {
+              window.opener.handleCategoriaDrill(year, almacen, categoria, "${metricKey}");
+            }
+          });
+
+          applyFiltersAndSort();
+        })();
+      </script>
     </body>
     </html>
-  `;
+  `);
 
-  win.document.write(html);
   win.document.close();
 }
 
-/* =========================================================
- *  Vista Detalle con panel de columnas + sort + filtros
- * ======================================================= */
+/* ====== Drill-down a detalle por artículos ====== */
+
+window.handleCategoriaDrill = function (year, almacen, categoria, metricKey) {
+  const base = getDatosFiltradosSinAnio();
+  if (!base.length) {
+    alert("Sin datos para mostrar detalle con los filtros actuales.");
+    return;
+  }
+
+  let rows = base;
+
+  switch (metricKey) {
+    case "credito":
+      rows = rows.filter((r) => r.tipoFactura === "Crédito");
+      break;
+    case "negativas":
+      rows = rows.filter((r) => (r.utilidad_num || 0) < 0);
+      break;
+    case "ventas":
+    case "utilidad":
+    case "margen":
+    default:
+      break;
+  }
+
+  rows = rows.filter((r) => {
+    const y = r.year != null ? String(r.year) : "";
+    const a = r.almacen || "";
+    const c = r.categoria || "SIN CATEGORIA";
+    return (
+      y === String(year) &&
+      a === almacen &&
+      c === categoria
+    );
+  });
+
+  if (!rows.length) {
+    alert("No hay artículos para esa categoría con los filtros actuales.");
+    return;
+  }
+
+  const maxRows = 4000;
+  const slice = rows.slice(0, maxRows);
+
+  let filasHTML = "";
+  slice.forEach((r) => {
+    const articulo =
+      r.producto || r["producto"] || r.clave || r["clave"] || "N/D";
+
+    const costoNum = parseNumero(
+      r.costo1 || r["costo1"] || r.costo2 || r["costo2"] || 0
+    );
+    const subtNum = r.subt_fac_num || 0;
+    const utilNum = r.utilidad_num || 0;
+    const margenNum = r.margen_calc || 0;
+
+    filasHTML += `
+      <tr>
+        <td>${r.year || ""}</td>
+        <td>${escapeHtml(r.almacen || "")}</td>
+        <td>${escapeHtml(r.categoria || "")}</td>
+        <td>${escapeHtml(articulo)}</td>
+        <td class="num" data-num="${costoNum}">${formatMoneda(costoNum)}</td>
+        <td class="num" data-num="${subtNum}">${formatMoneda(subtNum)}</td>
+        <td class="num" data-num="${margenNum}">${formatPorcentaje(margenNum)}</td>
+        <td class="num" data-num="${utilNum}">${formatMoneda(utilNum)}</td>
+      </tr>`;
+  });
+
+  const nota =
+    rows.length > maxRows
+      ? `<p style="font-size:11px;color:#9ca3af;">Mostrando ${maxRows} de ${rows.length} renglones.</p>`
+      : "";
+
+  const titulo = `Detalle por artículos – ${year} / ${almacen} / ${categoria}`;
+
+  const win = window.open("", "_blank");
+  if (!win) {
+    alert("El navegador bloqueó la ventana emergente.");
+    return;
+  }
+
+  win.document.write(`
+    <!DOCTYPE html>
+    <html lang="es">
+    <head>
+      <meta charset="UTF-8" />
+      <title>${escapeHtml(titulo)}</title>
+      <style>
+        body{
+          font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+          background:#020617;color:#e5e7eb;margin:0;padding:12px 16px;
+        }
+        h1{font-size:18px;margin:0 0 4px 0;}
+        p{margin:0 0 8px 0;font-size:12px;color:#9ca3af;}
+        table{width:100%;border-collapse:collapse;font-size:12px;}
+        th,td{border:1px solid #1f2937;padding:4px 6px;}
+        th{background:#020617;text-align:left;vertical-align:top;}
+        th.num,td.num{text-align:right;}
+        thead{position:sticky;top:0;}
+        .filter-input{
+          width:100%;
+          box-sizing:border-box;
+          font-size:11px;
+          padding:2px 3px;
+          border-radius:4px;
+          border:1px solid #1f2937;
+          background:#020617;
+          color:#e5e7eb;
+        }
+        .sort-btn{
+          border:none;
+          background:transparent;
+          color:#9ca3af;
+          font-size:10px;
+          cursor:pointer;
+          margin-left:4px;
+        }
+        .sort-btn.active{color:#e5e7eb;}
+      </style>
+    </head>
+    <body>
+      <h1>${escapeHtml(titulo)}</h1>
+      <p>
+        Detalle por artículos respetando los filtros superiores.
+        Puedes filtrar y ordenar cada columna como en Excel.
+      </p>
+      <table id="detalleArtTable">
+        <thead>
+          <tr>
+            <th data-col="0">Año <button class="sort-btn" data-col="0">⇅</button></th>
+            <th data-col="1">Almacén <button class="sort-btn" data-col="1">⇅</button></th>
+            <th data-col="2">Categoría <button class="sort-btn" data-col="2">⇅</button></th>
+            <th data-col="3">Artículo <button class="sort-btn" data-col="3">⇅</button></th>
+            <th data-col="4" class="num">Costo <button class="sort-btn" data-col="4">⇅</button></th>
+            <th data-col="5" class="num">Subtotal factura <button class="sort-btn" data-col="5">⇅</button></th>
+            <th data-col="6" class="num">Margen <button class="sort-btn" data-col="6">⇅</button></th>
+            <th data-col="7" class="num">Utilidad <button class="sort-btn" data-col="7">⇅</button></th>
+          </tr>
+          <tr>
+            <th><input class="filter-input" data-col="0" placeholder="Filtrar..." /></th>
+            <th><input class="filter-input" data-col="1" placeholder="Filtrar..." /></th>
+            <th><input class="filter-input" data-col="2" placeholder="Filtrar..." /></th>
+            <th><input class="filter-input" data-col="3" placeholder="Filtrar..." /></th>
+            <th><input class="filter-input" data-col="4" placeholder="Filtrar..." /></th>
+            <th><input class="filter-input" data-col="5" placeholder="Filtrar..." /></th>
+            <th><input class="filter-input" data-col="6" placeholder="Filtrar..." /></th>
+            <th><input class="filter-input" data-col="7" placeholder="Filtrar..." /></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filasHTML}
+        </tbody>
+      </table>
+      ${nota}
+
+      <script>
+        (function(){
+          var table = document.getElementById("detalleArtTable");
+          var tbody = table.querySelector("tbody");
+          var originalRows = Array.prototype.slice.call(tbody.querySelectorAll("tr"));
+          var numericCols = {4:true,5:true,6:true,7:true};
+          var sortCol = null;
+          var sortDir = "asc";
+
+          function applyFiltersAndSort() {
+            var filters = Array.prototype.slice.call(document.querySelectorAll(".filter-input"));
+            var rows = originalRows.slice();
+
+            rows = rows.filter(function(row){
+              return filters.every(function(input){
+                var val = (input.value || "").trim().toLowerCase();
+                if (!val) return true;
+                var colIndex = parseInt(input.getAttribute("data-col"),10);
+                var cell = row.children[colIndex];
+                if (!cell) return true;
+                return cell.textContent.toLowerCase().indexOf(val) !== -1;
+              });
+            });
+
+            if (sortCol !== null) {
+              var factor = sortDir === "asc" ? 1 : -1;
+              rows.sort(function(a,b){
+                var ca = a.children[sortCol];
+                var cb = b.children[sortCol];
+                if (!ca || !cb) return 0;
+
+                if (numericCols[sortCol]) {
+                  var va = parseFloat(ca.getAttribute("data-num") || "0");
+                  var vb = parseFloat(cb.getAttribute("data-num") || "0");
+                  if (va < vb) return -1 * factor;
+                  if (va > vb) return 1 * factor;
+                  return 0;
+                } else {
+                  var va = ca.textContent.toLowerCase();
+                  var vb = cb.textContent.toLowerCase();
+                  if (va < vb) return -1 * factor;
+                  if (va > vb) return 1 * factor;
+                  return 0;
+                }
+              });
+            }
+
+            tbody.innerHTML = "";
+            rows.forEach(function(r){ tbody.appendChild(r); });
+          }
+
+          Array.prototype.slice.call(document.querySelectorAll(".filter-input"))
+            .forEach(function(inp){
+              inp.addEventListener("input", applyFiltersAndSort);
+            });
+
+          Array.prototype.slice.call(document.querySelectorAll(".sort-btn"))
+            .forEach(function(btn){
+              btn.addEventListener("click", function(){
+                var col = parseInt(btn.getAttribute("data-col"),10);
+                if (sortCol === col) {
+                  sortDir = (sortDir === "asc" ? "desc" : "asc");
+                } else {
+                  sortCol = col;
+                  sortDir = "asc";
+                }
+
+                Array.prototype.slice.call(document.querySelectorAll(".sort-btn"))
+                  .forEach(function(b){ b.textContent = "⇅"; b.classList.remove("active"); });
+
+                btn.textContent = (sortDir === "asc" ? "▲" : "▼");
+                btn.classList.add("active");
+
+                applyFiltersAndSort();
+              });
+            });
+
+          applyFiltersAndSort();
+        })();
+      </script>
+    </body>
+    </html>
+  `);
+
+  win.document.close();
+};
+
+/* ================== Detalle (7 columnas + paleta drag & drop) =================== */
 
 function getColValue(row, colKey) {
   const col = getColByKey(colKey);
@@ -1322,7 +1590,6 @@ function getColValue(row, colKey) {
     return null;
   }
 }
-
 function getColDisplay(row, colKey) {
   const col = getColByKey(colKey);
   if (!col) return "";
@@ -1334,95 +1601,34 @@ function getColDisplay(row, colKey) {
     }
   }
   const v = getColValue(row, colKey);
-  if (v === null || v === undefined) return "";
-  return String(v);
+  return v == null ? "" : String(v);
 }
-
 function getColFilterValue(row, colKey) {
   return String(getColDisplay(row, colKey)).toLowerCase();
 }
 
-// panel izquierdo: lista de columnas
-function renderDetalleColumnPicker() {
-  const cont = document.getElementById("detalle-column-picker");
+function renderDetalleFieldPalette() {
+  const cont = document.getElementById("detalle-field-palette");
   if (!cont) return;
 
-  let html = `
-    <div class="col-picker-title">Columnas disponibles</div>
-    <div class="col-picker-help">
-      Marca las columnas que quieres ver en la tabla.<br/>
-      Arrastra las activas para cambiar el orden.
-    </div>
-    <div class="col-picker-list">
-  `;
-
+  let html = "";
   ALL_DETALLE_COLS.forEach((col) => {
-    const active = detalleActiveKeys.includes(col.key);
+    const assigned = detalleSlotKeys.includes(col.key);
     html += `
-      <div class="col-picker-item${active ? " active" : ""}" draggable="true" data-key="${
-        col.key
-      }">
-        <span class="col-picker-handle">☰</span>
-        <span class="col-picker-label">${col.label}</span>
-        <input type="checkbox" class="col-picker-check" ${
-          active ? "checked" : ""
-        } />
-      </div>
-    `;
+      <div class="field-chip${assigned ? " assigned" : ""}"
+           draggable="true" data-key="${col.key}">
+        ${col.label}
+      </div>`;
   });
-
-  html += "</div>";
   cont.innerHTML = html;
 
-  const items = cont.querySelectorAll(".col-picker-item");
-  let dragKey = null;
-
-  items.forEach((item) => {
-    const key = item.getAttribute("data-key");
-    const chk = item.querySelector(".col-picker-check");
-
-    // activar / desactivar columna
-    chk.addEventListener("change", () => {
-      const checked = chk.checked;
-      if (checked && !detalleActiveKeys.includes(key)) {
-        detalleActiveKeys.push(key);
-      } else if (!checked && detalleActiveKeys.includes(key)) {
-        detalleActiveKeys = detalleActiveKeys.filter((k) => k !== key);
-        if (detalleSortState.col === key) {
-          detalleSortState.col = null;
-        }
-        delete detalleColFilters[key];
-      }
-      renderDetalleColumnPicker();
-      renderDetalle();
-    });
-
-    // drag & drop solo para columnas activas
-    item.addEventListener("dragstart", (e) => {
-      dragKey = key;
-      item.classList.add("dragging");
+  cont.querySelectorAll(".field-chip").forEach((chip) => {
+    chip.addEventListener("dragstart", (e) => {
+      dragFieldKey = chip.dataset.key;
       e.dataTransfer.effectAllowed = "move";
     });
-
-    item.addEventListener("dragend", () => {
-      dragKey = null;
-      item.classList.remove("dragging");
-    });
-
-    item.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      const overKey = key;
-      if (!dragKey || dragKey === overKey) return;
-
-      const fromIdx = detalleActiveKeys.indexOf(dragKey);
-      const toIdx = detalleActiveKeys.indexOf(overKey);
-      if (fromIdx === -1 || toIdx === -1) return; // alguno no activo
-
-      detalleActiveKeys.splice(fromIdx, 1);
-      detalleActiveKeys.splice(toIdx, 0, dragKey);
-
-      renderDetalleColumnPicker();
-      renderDetalle();
+    chip.addEventListener("dragend", () => {
+      dragFieldKey = null;
     });
   });
 }
@@ -1430,13 +1636,13 @@ function renderDetalleColumnPicker() {
 function renderDetalle() {
   const cont = document.getElementById("tablaDetalle");
   const search = document.getElementById("searchDetalle");
-  const infoDiv = document.getElementById("detalleDrillInfo");
+  const info = document.getElementById("detalleDrillInfo");
   if (!cont || !search) return;
 
   const base = getDatosFiltrados();
   if (!base.length) {
     cont.innerHTML = "<p>Sin datos para los filtros seleccionados.</p>";
-    if (infoDiv) infoDiv.textContent = "";
+    if (info) info.textContent = "";
     return;
   }
 
@@ -1445,60 +1651,48 @@ function renderDetalle() {
 
   if (drillMetric === "negativas") {
     rows = rows.filter((r) => (r.utilidad_num || 0) < 0);
-    textoInfo =
-      "Drill-down: solo filas con utilidad negativa (según filtros actuales).";
+    textoInfo = "Drill-down: solo filas con utilidad negativa.";
   } else if (drillMetric === "credito") {
     rows = rows.filter((r) => r.tipoFactura === "Crédito");
-    textoInfo =
-      "Drill-down: solo facturas a Crédito (según filtros actuales).";
+    textoInfo = "Drill-down: solo facturas a Crédito.";
   } else if (drillMetric === "ventas") {
-    textoInfo = "Drill-down: detalle de ventas (solo filtros globales).";
+    textoInfo = "Drill-down: detalle de ventas.";
   } else if (drillMetric === "utilidad") {
-    textoInfo = "Drill-down: detalle de utilidad bruta (solo filtros globales).";
+    textoInfo = "Drill-down: detalle de utilidad.";
   } else if (drillMetric === "margen") {
-    textoInfo = "Drill-down: detalle para analizar margen (solo filtros globales).";
-  } else {
-    textoInfo = "";
+    textoInfo = "Drill-down: análisis de margen.";
   }
-
-  if (infoDiv) infoDiv.textContent = textoInfo;
+  if (info) info.textContent = textoInfo;
 
   const texto = search.value.trim().toLowerCase();
   if (texto) {
     rows = rows.filter((r) => {
-      const cliente = (r["cliente"] || "").toString().toLowerCase();
-      const producto = (r["producto"] || "").toString().toLowerCase();
-      const factura = (r["factura"] || "").toString().toLowerCase();
+      const c = (r.cliente || r["cliente"] || "").toLowerCase();
+      const p = (r.producto || r["producto"] || "").toLowerCase();
+      const f = (r.factura || r["factura"] || "").toLowerCase();
       return (
-        cliente.includes(texto) ||
-        producto.includes(texto) ||
-        factura.includes(texto)
+        c.includes(texto) || p.includes(texto) || f.includes(texto)
       );
     });
   }
 
-  // filtros por columna
-  Object.entries(detalleColFilters).forEach(([colKey, rawValue]) => {
-    const filtro = (rawValue || "").trim().toLowerCase();
-    if (!filtro) return;
-    rows = rows.filter((r) => {
-      const cell = getColFilterValue(r, colKey);
-      return cell.includes(filtro);
-    });
+  Object.entries(detalleColFilters).forEach(([colKey, val]) => {
+    const f = (val || "").trim().toLowerCase();
+    if (!f) return;
+    rows = rows.filter((r) =>
+      getColFilterValue(r, colKey).includes(f)
+    );
   });
 
-  // ordenamiento
   if (detalleSortState.col) {
     const { col, dir } = detalleSortState;
     const factor = dir === "asc" ? 1 : -1;
     rows = [...rows].sort((a, b) => {
       const va = getColValue(a, col);
       const vb = getColValue(b, col);
-
-      if (va === null && vb === null) return 0;
-      if (va === null) return -1 * factor;
-      if (vb === null) return 1 * factor;
-
+      if (va == null && vb == null) return 0;
+      if (va == null) return -1 * factor;
+      if (vb == null) return 1 * factor;
       if (va < vb) return -1 * factor;
       if (va > vb) return 1 * factor;
       return 0;
@@ -1510,18 +1704,15 @@ function renderDetalle() {
   const cols = getActiveDetalleCols();
 
   if (!slice.length) {
-    cont.innerHTML =
-      "<p>Sin filas para mostrar con el drill-down, búsqueda y filtros por columna aplicados.</p>";
+    cont.innerHTML = "<p>Sin filas para mostrar con los filtros actuales.</p>";
     return;
   }
 
-  // construir tabla
   let html = `
     <table class="tabla-detalle">
       <thead>
-        <tr>
-  `;
-  cols.forEach((col) => {
+        <tr>`;
+  cols.forEach((col, idx) => {
     const isActive = detalleSortState.col === col.key;
     const symbol = !isActive
       ? "⇅"
@@ -1529,60 +1720,48 @@ function renderDetalle() {
       ? "▲"
       : "▼";
     html += `
-      <th data-col="${col.key}">
+      <th data-col="${col.key}" data-slot="${idx}">
         ${col.label}
-        <button type="button" class="th-sort${isActive ? " active" : ""}">
-          ${symbol}
-        </button>
+        <button type="button" class="th-sort${
+          isActive ? " active" : ""
+        }">${symbol}</button>
       </th>`;
   });
   html += `
         </tr>
-        <tr>
-  `;
+        <tr>`;
   cols.forEach((col) => {
     const val = detalleColFilters[col.key] || "";
     html += `
       <th>
-        <input
-          class="detalle-filter"
-          data-col="${col.key}"
-          value="${val.replace(/"/g, "&quot;")}"
-          placeholder="Filtrar..."
-        />
+        <input class="detalle-filter" data-col="${
+          col.key
+        }" value="${val.replace(/"/g, "&quot;")}" placeholder="Filtrar..." />
       </th>`;
   });
   html += `
         </tr>
       </thead>
-      <tbody>
-  `;
-
+      <tbody>`;
   slice.forEach((r) => {
     html += "<tr>";
     cols.forEach((col) => {
-      const display = getColDisplay(r, col.key);
-      html += `<td>${display}</td>`;
+      html += `<td>${getColDisplay(r, col.key)}</td>`;
     });
     html += "</tr>";
   });
-
   html += "</tbody></table>";
-
   if (rows.length > maxRows) {
     html += `<p class="help-text">Mostrando ${maxRows} de ${rows.length} filas.</p>`;
   }
 
   cont.innerHTML = html;
 
-  // eventos de sort
   cont.querySelectorAll(".th-sort").forEach((btn) => {
     btn.addEventListener("click", () => {
       const th = btn.closest("th");
-      if (!th) return;
       const colKey = th.getAttribute("data-col");
       if (!colKey) return;
-
       if (detalleSortState.col === colKey) {
         detalleSortState.dir =
           detalleSortState.dir === "asc" ? "desc" : "asc";
@@ -1594,23 +1773,52 @@ function renderDetalle() {
     });
   });
 
-  // eventos filtros por columna
-  cont.querySelectorAll(".detalle-filter").forEach((input) => {
-    input.addEventListener("input", () => {
-      const colKey = input.getAttribute("data-col");
-      detalleColFilters[colKey] = input.value;
+  cont.querySelectorAll(".detalle-filter").forEach((inp) => {
+    inp.addEventListener("input", () => {
+      const colKey = inp.getAttribute("data-col");
+      detalleColFilters[colKey] = inp.value;
       renderDetalle();
     });
   });
+
+  cont
+    .querySelectorAll("thead tr:first-child th")
+    .forEach((th) => {
+      th.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        th.classList.add("drop-target");
+      });
+      th.addEventListener("dragleave", () => {
+        th.classList.remove("drop-target");
+      });
+      th.addEventListener("drop", (e) => {
+        e.preventDefault();
+        th.classList.remove("drop-target");
+        if (!dragFieldKey) return;
+        const slot = parseInt(th.getAttribute("data-slot"), 10);
+        if (isNaN(slot)) return;
+
+        detalleSlotKeys = detalleSlotKeys.map((k, idx) =>
+          idx === slot
+            ? dragFieldKey
+            : k === dragFieldKey && idx !== slot
+            ? null
+            : k
+        );
+        detalleSortState = { col: null, dir: "asc" };
+        detalleColFilters = {};
+        dragFieldKey = null;
+        renderDetalleFieldPalette();
+        renderDetalle();
+      });
+    });
 }
 
-/* =========================================================
- *  Render global
- * ======================================================= */
+/* ================== Render global =================== */
 
 function renderizarDashboard() {
-  const rowsFiltrados = getDatosFiltrados();
-  if (!rowsFiltrados || rowsFiltrados.length === 0) {
+  const rows = getDatosFiltrados();
+  if (!rows.length) {
     actualizarKpiCards({
       ventas: 0,
       utilidad: 0,
@@ -1624,11 +1832,94 @@ function renderizarDashboard() {
     renderGraficoDiaSemana([]);
     return;
   }
-
-  const kpi = calcularKpis(rowsFiltrados);
+  const kpi = calcularKpis(rows);
   actualizarKpiCards(kpi);
-  renderTablaSucursales(rowsFiltrados);
-  renderGraficoCategorias(rowsFiltrados);
-  renderGraficoSucursales(rowsFiltrados);
-  renderGraficoDiaSemana(rowsFiltrados);
+  renderTablaSucursales(rows);
+  renderGraficoCategorias(rows);
+  renderGraficoSucursales(rows);
+  renderGraficoDiaSemana(rows);
 }
+
+/* ================== DOM Ready =================== */
+
+document.addEventListener("DOMContentLoaded", () => {
+  const fileInput = document.getElementById("fileInput");
+  if (fileInput) {
+    fileInput.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      Papa.parse(file, {
+        header: true,
+        dynamicTyping: false,
+        skipEmptyLines: true,
+        complete: (res) => {
+          dataRaw = res.data || [];
+          dataClean = limpiarDatos(dataRaw);
+          inicializarFiltros(dataClean);
+          renderizarDashboard();
+          renderDetalle();
+        },
+      });
+    });
+  }
+
+  ["filtroAnio", "filtroAlmacen", "filtroTipoFactura", "filtroCategoria", "chkExcluirAD"].forEach(
+    (id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener("change", () => {
+        const activeBtn = document.querySelector(".tab-btn.active");
+        const view = activeBtn ? activeBtn.dataset.view : "resumen";
+        if (view === "resumen") renderizarDashboard();
+        else if (view === "comparativo") renderComparativo();
+        else if (view === "detalle") renderDetalle();
+      });
+    }
+  );
+
+  const searchDetalle = document.getElementById("searchDetalle");
+  if (searchDetalle) {
+    searchDetalle.addEventListener("input", () => {
+      renderDetalle();
+    });
+  }
+
+  const tabButtons = document.querySelectorAll(".tab-btn");
+  const views = document.querySelectorAll(".view");
+  tabButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const view = btn.dataset.view;
+      if (view !== "detalle") drillMetric = null;
+
+      tabButtons.forEach((b) => b.classList.remove("active"));
+      views.forEach((v) => v.classList.remove("active"));
+      btn.classList.add("active");
+      document.getElementById(`view-${view}`).classList.add("active");
+
+      if (view === "resumen") renderizarDashboard();
+      else if (view === "comparativo") renderComparativo();
+      else if (view === "detalle") {
+        renderDetalleFieldPalette();
+        renderDetalle();
+      }
+    });
+  });
+
+  const contComp = document.getElementById("tablaComparativoGlobal");
+  if (contComp) {
+    contComp.addEventListener("dblclick", (e) => {
+      const tr = e.target.closest("tr[data-metric]");
+      if (!tr) return;
+      const metric = tr.dataset.metric;
+      handleComparativoDblClick(metric);
+    });
+  }
+
+  document.addEventListener("click", (e) => {
+    document.querySelectorAll(".chip-select-dropdown").forEach((dd) => {
+      if (!dd.parentNode.contains(e.target)) dd.classList.remove("open");
+    });
+  });
+
+  renderDetalleFieldPalette();
+});
